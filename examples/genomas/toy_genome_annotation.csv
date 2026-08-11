@@ -1,0 +1,5 @@
+gene_id,start,end,strand,promoter_id
+ribo1,21,110,+,strong_promoter
+ribo2,131,214,+,strong_promoter
+metA,235,354,+,medium_promoter
+reg1,375,479,-,weak_promoter
