@@ -42,6 +42,7 @@ Módulo metabólico mínimo que provea energía (ATP) y precursores (NTPs, amino
 Módulo de replicación de ADN y división celular con segregación estocástica de moléculas.
 Registro y visualización de trayectorias temporales, enlazado con el histórico de eventos del depurador.
 Diseño escalable del genoma de entrada: el número de genes debe ser un parámetro de datos (archivo de secuencia + anotación), no una constante del código, para que el mismo software sirva después con genomas de cientos de genes en estudios más serios.
+
 2.3 Explícitamente fuera de alcance (por ahora)
 Simulación espacial (difusión 3D, geometría celular real).
 Mutación del ADN y evolución darwiniana / poblacional.
@@ -49,6 +50,7 @@ Redes metabólicas a escala genómica completa (FBA de miles de reacciones).
 Interacciones célula-célula o entornos multicelulares.
 Construcción de modelos asistida por LLM (considerada, aparcada para una fase futura — ver sección 9).
 Control de versiones tipo "git" para modelos biológicos (considerada, aparcada para una fase futura — ver sección 9).
+
 3. Decisiones de diseño fundamentales
 Decisión	Elección	Justificación
 Espacialidad	No espacial (well-mixed)	Reduce drásticamente la complejidad; primera aproximación válida y extensible después.
@@ -59,7 +61,9 @@ Resto de componentes no críticos para la innovación	Librerías de terceros mad
 Fuente del "ADN"	Secuencia real (BioPython Seq), con anotación de genes	Evita inventar reglas arbitrarias; usa el código genético estándar real.
 Entrada del genoma	Archivo externo (FASTA + anotación GFF3/CSV), nunca codificado en Python	Permite escalar de 8 a cientos de genes sin tocar código, y cargar genomas reales descargados de bases de datos públicas.
 Formato de red de reacciones	Compatible con SBML donde sea posible (import/export)	Permite interoperar con herramientas existentes y comparar contra modelos publicados.
+
 4. El diferenciador: depurador interactivo
+   
 4.1 Concepto
 
 Igual que un IDE permite pausar un programa, poner un breakpoint, e inspeccionar variables en memoria, este depurador permite:
