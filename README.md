@@ -363,11 +363,3 @@ El proyecto se desarrollará públicamente en **GitHub** desde la Fase 0, no com
 - Abel, J.H. et al. / GillesPy2 documentation (StochSS project) — referencia de por qué las librerías SSA existentes no exponen ejecución paso a paso de forma nativa.
 
 ---
-
-## Próximo paso
-
-Con este documento como referencia, el siguiente paso es implementar la **Fase 0**: el motor SSA propio, escrito como generador/iterador en Python, validado contra un sistema químico de prueba simple — sentando la base sobre la que se construirá la capa de depuración en la Fase 0.5.
-
-## Próximo paso
-
-Con este documento como referencia, el siguiente paso es implementar la **Fase 0**: el motor SSA propio, escrito como generador/iterador en Python, validado contra un sistema químico de prueba simple — sentando la base sobre la que se construirá la capa de depuración en la Fase 0.5.
