@@ -1,11 +1,11 @@
-Célula Virtual: Simulación Biofísica de una Célula Mínima con Depuración Interactiva
+# Célula Virtual: Simulación Biofísica de una Célula Mínima con Depuración Interactiva
 
- White paper de diseño — v0.2**
- Fecha:** Agosto 2026
+**White paper de diseño — v0.2**
+**Fecha:** Agosto 2026
 
 ---
 
-Resumen ejecutivo
+## Resumen ejecutivo
 
 Este documento define el diseño de un software en Python capaz de representar una célula virtual vacía, a la que se le puede añadir una secuencia de ADN, y observar la **dinámica temporal** resultante: expresión génica, metabolismo energético, replicación del ADN y división celular, simulado con **cinética química estocástica** (algoritmo de Gillespie).
 
@@ -15,14 +15,14 @@ El proyecto se enmarca en la tradición de los *whole-cell models* de biología 
 
 ---
 
-1. Motivación y precedentes
+## 1. Motivación y precedentes
 
- 1.1 El estado del arte
+### 1.1 El estado del arte
 Los modelos de célula completa más relevantes son:
 
-- E-Cell** (desde 1996) y su versión actual **E-Cell4**: plataforma de código abierto para modelar sistemas multiescala como la célula, con núcleo en C++ y frontend en Python.
-- *Virtual Cell (VCell)**: software libre con interfaz gráfica sin necesidad de programar; el usuario introduce reacciones y VCell genera el modelo matemático automáticamente. Permite ejecutar en local o delegar a sus servidores.
-- *Whole-Cell Model de *M. genitalium*** (Karr et al., *Cell*, 2012): primer modelo que integró los procesos biológicos conocidos de un organismo completo (525 genes).
+- **E-Cell** (desde 1996) y su versión actual **E-Cell4**: plataforma de código abierto para modelar sistemas multiescala como la célula, con núcleo en C++ y frontend en Python.
+- **Virtual Cell (VCell)**: software libre con interfaz gráfica sin necesidad de programar; el usuario introduce reacciones y VCell genera el modelo matemático automáticamente. Permite ejecutar en local o delegar a sus servidores.
+- **Whole-Cell Model de *M. genitalium*** (Karr et al., *Cell*, 2012): primer modelo que integró los procesos biológicos conocidos de un organismo completo (525 genes).
 - **Modelo de *JCVI-syn3A*** (Covert Lab, Stanford, 2022–2023): sucesor sobre la célula mínima sintética (~473 genes), extendido posteriormente a colonias de *E. coli* mediante la librería **Vivarium**, que permite simulaciones paralelizadas en la nube con detalle molecular completo en un entorno espacial compartido.
 
 ### 1.2 El hueco identificado
@@ -363,6 +363,10 @@ El proyecto se desarrollará públicamente en **GitHub** desde la Fase 0, no com
 - Abel, J.H. et al. / GillesPy2 documentation (StochSS project) — referencia de por qué las librerías SSA existentes no exponen ejecución paso a paso de forma nativa.
 
 ---
+
+## Próximo paso
+
+Con este documento como referencia, el siguiente paso es implementar la **Fase 0**: el motor SSA propio, escrito como generador/iterador en Python, validado contra un sistema químico de prueba simple — sentando la base sobre la que se construirá la capa de depuración en la Fase 0.5.
 
 ## Próximo paso
 
