@@ -117,6 +117,39 @@ def test_install_raises_if_mrna_species_missing():
         translation_module.install(cell)
 
 
+def test_translation_consumes_atp_when_coupled():
+    cell, installed_genes = build_cell_with_genome_installed()
+    cell.add_species("ATP", 100)
+    translation_module = TranslationModule(installed_genes)
+
+    translation_module.install(cell, atp_species_id="ATP", atp_cost_per_translation=4)
+
+    ribo1 = translation_module.get_translated("ribo1")
+    reaction = cell.reactions.get_reaction(ribo1.translation_reaction_id)
+    assert reaction.reactants["ATP"] == 4
+
+
+def test_translation_atp_coupling_raises_if_atp_species_missing():
+    cell, installed_genes = build_cell_with_genome_installed()  # sin especie ATP
+    translation_module = TranslationModule(installed_genes)
+
+    with pytest.raises(TranslationModuleError):
+        translation_module.install(cell, atp_species_id="ATP", atp_cost_per_translation=4)
+
+
+def test_translation_without_atp_coupling_is_unaffected():
+    """Regresión: sin pasar atp_species_id, el comportamiento debe ser idéntico al de antes."""
+    cell, installed_genes = build_cell_with_genome_installed()
+    translation_module = TranslationModule(installed_genes)
+
+    translation_module.install(cell)
+
+    ribo1 = translation_module.get_translated("ribo1")
+    reaction = cell.reactions.get_reaction(ribo1.translation_reaction_id)
+    assert "ATP" not in reaction.reactants
+    assert reaction.reactants == {"Ribosome": 1, "mRNA_ribo1": 1}
+
+
 def test_installing_translation_twice_raises_name_conflict():
     cell, installed_genes = build_cell_with_genome_installed()
     translation_module = TranslationModule(installed_genes)

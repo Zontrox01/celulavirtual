@@ -87,12 +87,30 @@ def test_step_raises_after_simulation_ended():
     debugger.step(n=2)  # agota las 2 moléculas de A
     assert debugger.has_ended is False  # todavía no se ha intentado un paso de más
 
-    empty = debugger.step()  # este intento choca con SimulationEnded internamente
+    empty = debugger.step()  # este intento choca con PropensityExhausted internamente
     assert empty == []
     assert debugger.has_ended is True
 
     with pytest.raises(DebuggerEndedError):
         debugger.step()
+
+
+def test_max_time_pause_does_not_mark_debugger_as_permanently_ended():
+    """
+    Regresión: si el GillespieSSA subyacente tiene max_time y lo
+    alcanza, el depurador NO debe marcarse como terminado de forma
+    permanente (a diferencia de agotar la propensidad total).
+    """
+    sm, rm, _ = build_system(seed=4, a=10_000)
+    ssa = GillespieSSA(sm, rm, seed=4, max_time=0.001)
+    debugger = Debugger(ssa)
+
+    debugger.run_until_breakpoint(max_steps=100_000)
+    assert debugger.has_ended is False
+
+    ssa.max_time = 0.002
+    more_events = debugger.step(n=5)
+    assert len(more_events) > 0, "debería poder seguir avanzando tras subir max_time"
 
 
 # ---------------------------------------------------------------------

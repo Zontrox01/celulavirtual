@@ -130,6 +130,39 @@ def test_transcription_produces_mrna_and_conserves_gene_copy():
     assert total_mrna == 20  # cada paso ejecutado es, por diseño, una transcripción
 
 
+def test_transcription_consumes_atp_when_coupled():
+    cell = Cell(seed=1)
+    cell.add_species("ATP", 100)
+    module = GenomeModule(make_toy_genome_data())
+
+    module.install(cell, atp_species_id="ATP", atp_cost_per_transcription=3)
+
+    ribo1 = module.get_installed("ribo1")
+    reaction = cell.reactions.get_reaction(ribo1.transcription_reaction_id)
+    assert reaction.reactants["ATP"] == 3
+
+
+def test_transcription_atp_coupling_raises_if_atp_species_missing():
+    cell = Cell(seed=1)  # sin especie ATP
+    module = GenomeModule(make_toy_genome_data())
+
+    with pytest.raises(GenomeModuleError):
+        module.install(cell, atp_species_id="ATP", atp_cost_per_transcription=3)
+
+
+def test_transcription_without_atp_coupling_is_unaffected():
+    """Regresión: sin pasar atp_species_id, el comportamiento debe ser idéntico al de antes."""
+    cell = Cell(seed=1)
+    module = GenomeModule(make_toy_genome_data())
+
+    module.install(cell)
+
+    ribo1 = module.get_installed("ribo1")
+    reaction = cell.reactions.get_reaction(ribo1.transcription_reaction_id)
+    assert "ATP" not in reaction.reactants
+    assert reaction.reactants == {"RNAP": 1, "gene_ribo1": 1}
+
+
 def test_installing_the_same_genome_twice_raises_name_conflict():
     cell = Cell(seed=1)
     module = GenomeModule(make_toy_genome_data())
