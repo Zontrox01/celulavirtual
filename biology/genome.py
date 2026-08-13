@@ -69,6 +69,8 @@ class GenomeModule:
         rnap_initial_count: int = 30,
         base_transcription_rate: float = 1.0,
         promoter_strengths: Optional[Dict[str, float]] = None,
+        atp_species_id: Optional[str] = None,
+        atp_cost_per_transcription: int = 0,
     ) -> List[InstalledGene]:
         """
         Registra en `cell` las especies y reacciones de transcripción
@@ -79,11 +81,26 @@ class GenomeModule:
         Los genes sin entrada en este diccionario usan multiplicador 1.0
         (es decir, tasa = base_transcription_rate).
 
+        `atp_species_id` / `atp_cost_per_transcription`: acoplamiento
+        energético opcional (whitepaper, Fase 3). Si se indican ambos
+        (con coste > 0), cada transcripción consume esa cantidad de
+        ATP además de RNAP y el gen — la especie de ATP debe existir
+        ya en la célula (instalada por biology/metabolism.py). Por
+        defecto no hay coste de ATP, para no romper el comportamiento
+        ya validado en fases anteriores.
+
         Devuelve la lista de genes instalados, con los IDs de especie
         y reacción generados para cada uno — útiles para poner
         breakpoints o inspeccionar resultados después.
         """
         promoter_strengths = promoter_strengths or {}
+        couple_to_atp = atp_species_id is not None and atp_cost_per_transcription > 0
+
+        if couple_to_atp and not cell.species.has_species(atp_species_id):
+            raise GenomeModuleError(
+                f"Se pidió acoplar la transcripción a ATP ('{atp_species_id}'), pero esa "
+                f"especie no existe en la célula (¿se instaló primero MetabolismModule?)."
+            )
 
         if not cell.species.has_species(rnap_species_id):
             cell.add_species(rnap_species_id, rnap_initial_count)
@@ -108,14 +125,12 @@ class GenomeModule:
             strength_multiplier = promoter_strengths.get(lookup_key, 1.0)
             rate = base_transcription_rate * strength_multiplier
 
-            cell.add_reaction(
-                Reaction(
-                    reaction_id,
-                    reactants={rnap_species_id: 1, gene_species_id: 1},
-                    products={rnap_species_id: 1, gene_species_id: 1, mrna_species_id: 1},
-                    rate_constant=rate,
-                )
-            )
+            reactants = {rnap_species_id: 1, gene_species_id: 1}
+            products = {rnap_species_id: 1, gene_species_id: 1, mrna_species_id: 1}
+            if couple_to_atp:
+                reactants[atp_species_id] = atp_cost_per_transcription  # se consume, no se repone
+
+            cell.add_reaction(Reaction(reaction_id, reactants=reactants, products=products, rate_constant=rate))
 
             record = InstalledGene(
                 gene_id=gene.gene_id,

@@ -65,6 +65,8 @@ class TranslationModule:
         ribosome_initial_count: int = 20,
         base_translation_rate: float = 1.0,
         rbs_strengths: Optional[Dict[str, float]] = None,
+        atp_species_id: Optional[str] = None,
+        atp_cost_per_translation: int = 0,
     ) -> List[TranslatedGene]:
         """
         Registra en `cell` las especies y reacciones de traducción de
@@ -72,8 +74,19 @@ class TranslationModule:
 
         `rbs_strengths`: multiplicador de tasa por gen, indexado por
         gene_id. Los genes sin entrada usan multiplicador 1.0.
+
+        `atp_species_id` / `atp_cost_per_translation`: acoplamiento
+        energético opcional (whitepaper, Fase 3), mismo mecanismo que
+        en GenomeModule.install(). Por defecto no hay coste de ATP.
         """
         rbs_strengths = rbs_strengths or {}
+        couple_to_atp = atp_species_id is not None and atp_cost_per_translation > 0
+
+        if couple_to_atp and not cell.species.has_species(atp_species_id):
+            raise TranslationModuleError(
+                f"Se pidió acoplar la traducción a ATP ('{atp_species_id}'), pero esa "
+                f"especie no existe en la célula (¿se instaló primero MetabolismModule?)."
+            )
 
         if not cell.species.has_species(ribosome_species_id):
             cell.add_species(ribosome_species_id, ribosome_initial_count)
@@ -101,15 +114,20 @@ class TranslationModule:
 
             rate = base_translation_rate * rbs_strengths.get(gene.gene_id, 1.0)
 
+            reactants = {ribosome_species_id: 1, gene.mrna_species_id: 1}
+            products = {
+                ribosome_species_id: 1,
+                gene.mrna_species_id: 1,
+                protein_species_id: 1,
+            }
+            if couple_to_atp:
+                reactants[atp_species_id] = atp_cost_per_translation
+
             cell.add_reaction(
                 Reaction(
                     reaction_id,
-                    reactants={ribosome_species_id: 1, gene.mrna_species_id: 1},
-                    products={
-                        ribosome_species_id: 1,
-                        gene.mrna_species_id: 1,
-                        protein_species_id: 1,
-                    },
+                    reactants=reactants,
+                    products=products,
                     rate_constant=rate,
                 )
             )
