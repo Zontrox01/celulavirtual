@@ -8,12 +8,12 @@ Documento vivo. Se actualiza cada vez que se crea o modifica un archivo relevant
 |---|---|---|---|---|
 | `engine/species.py` | Gestor de especies moleculares (catálogo y cantidades) | 1 — Motor | 0 | ✅ |
 | `engine/reactions.py` | Gestor de reacciones (reactivos, productos, propensidad) | 1 — Motor | 0 | ✅ |
-| `engine/ssa.py` | Bucle SSA propio (algoritmo de Gillespie, generador/iterador) | 1 — Motor | 0 | ✅ (corregido: max_time ya no marca fin permanente, ver nota) |
+| `engine/ssa.py` | Bucle SSA propio (algoritmo de Gillespie, generador/iterador); `get_full_state()`/`restore_full_state()` para el retroceso | 1 — Motor | 0 / 5.3 | ✅ |
 | `engine/trajectory.py` | Registro de trayectorias temporales (pandas) | 1 — Motor | 0 | ✅ |
-| `engine/debugger.py` | Ejecución paso a paso, breakpoints condicionales, inspección de estado | 1 — Motor | 0.5 | ✅ (corregido en el mismo cambio que ssa.py) |
+| `engine/debugger.py` | Ejecución paso a paso, breakpoints condicionales, inspección de estado, `undo_to()` (retroceso opcional vía snapshots) | 1 — Motor | 0.5 / 5.3 | ✅ |
 | `engine/propensity_view.py` | Visualización del espacio de propensidades (datos testeables + render `rich` con fallback en texto) | 1 — Motor | 5.1 | ✅ |
 | `engine/forensics.py` | Análisis causal retrospectivo ("modo forense", sección 4.5) — `ForensicsAnalyzer.analyze_species()` | 1 — Motor | 5.2 | ✅ |
-| `engine/snapshot.py` | Snapshots de estado + retroceso (undo) | 1 — Motor | 5.3 | 🔲 |
+| `engine/snapshot.py` | Snapshots de estado + retroceso (undo) — `SnapshotStore`, reproducción determinista desde el snapshot más cercano | 1 — Motor | 5.3 | ✅ |
 | `biology/genome.py` | `GenomeModule` — instala especies/reacciones de transcripción; acoplamiento energético opcional a ATP (Fase 3) | 2 — Biología | 1 / 3 | ✅ |
 | `biology/transcription.py` | `TranscriptionModule` — ARN-pol, elongación, terminación | 2 — Biología | 1 | 🔲 |
 | `biology/translation.py` | `TranslationModule` — instala proteínas y reacciones de traducción; acoplamiento energético opcional a ATP (Fase 3) | 2 — Biología | 1 / 3 | ✅ |
@@ -23,13 +23,16 @@ Documento vivo. Se actualiza cada vez que se crea o modifica un archivo relevant
 | `biology/replication.py` | `ReplicationModule` — condición de división + reparto binomial de especies entre 2 células hijas | 2 — Biología | 4 | ✅ |
 | `data_io/genome_loader.py` | Carga de genoma desde FASTA + anotación GFF3/CSV (sección 6.2) | I/O | 0 | ✅ |
 | `data_io/sbml_io.py` | Import/export de modelos en formato SBML (sección 7) | I/O | — | 🔲 |
-| `cell.py` | Orquestador `Cell` — compone módulos, API pública, modo normal y depurado | 3 — Orquestador | 0 / 0.5 | ✅ (`run()`, `get_trajectory()`, `debug()`) |
+| `cell.py` | Orquestador `Cell` — compone módulos, API pública, modo normal y depurado, incluido `undo` sincronizado | 3 — Orquestador | 0 / 0.5 / 5.3 | ✅ (`run()`, `get_trajectory()`, `debug()` con `on_event`/`on_undo` sincronizados) |
 | `tests/test_ssa.py` | Validación mecánica (conservación, monotonía, reproducibilidad) y estadística (tiempo de espera exponencial, elección proporcional a propensidad) del motor SSA — 10 casos | Tests | 0 | ✅ |
 | `tests/test_species.py` | Validación unitaria de `engine/species.py` (13 casos, sin pytest disponible en este entorno: ejecutados con `assert` puro) | Tests | 0 | ✅ |
 | `tests/test_reactions.py` | Validación unitaria de `engine/reactions.py` — propensidades uni/bimoleculares, `apply()`, validaciones (13 casos) | Tests | 0 | ✅ |
 | `tests/test_cell.py` | Validación unitaria de `cell.py` — encadenado, `run()`, `max_steps`/`max_time`, `get_trajectory()`, `debug()` y su sincronización con `run()` (13 casos) | Tests | 0 / 0.5 | ✅ |
 | `tests/test_trajectory.py` | Validación de `engine/trajectory.py` — reconstrucción, conservación, columnas, errores (7 casos) | Tests | 0 | ✅ |
 | `tests/test_debugger.py` | Validación de `engine/debugger.py` — incluye el criterio central: paso a paso produce exactamente la misma secuencia que `run()` con el mismo seed (13 casos) | Tests | 0.5 | ✅ |
+| `tests/test_snapshot.py` | Validación de `engine/snapshot.py` — intervalos, snapshot más cercano, y el criterio central: retroceder + reproducir = exactamente el futuro ya ocurrido (10 casos) | Tests | 5.3 | ✅ |
+| `tests/test_debugger_undo.py` | Validación de la integración `undo_to()` en `Debugger` — truncado de histórico, sincronización de `has_ended`, reproducibilidad exacta, regresión (9 casos) | Tests | 5.3 | ✅ |
+| `tests/test_cell_debug_undo.py` | Cierra la limitación de sincronización Cell↔undo — recorte de `cell.get_events()`, `get_trajectory()` consistente, continuar con `run()` tras un retroceso (7 casos) | Tests | 5.3 | ✅ |
 | `tests/test_genome_loader.py` | Validación de `data_io/genome_loader.py` — carga, hebra +/-, y todas las validaciones de FASTA/anotación (14 casos) | Tests | 0 | ✅ |
 | `tests/test_genome.py` | Validación de `biology/genome.py` — instalación, conflictos de nombre, tasas por promotor, acoplamiento ATP opcional, integración de extremo a extremo (13 casos) | Tests | 1 / 3 | ✅ |
 | `tests/test_translation.py` | Validación de `biology/translation.py` — instalación, conflictos, tasas por RBS, acoplamiento ATP opcional, pipeline ADN→ARNm→proteína (13 casos) | Tests | 1 / 3 | ✅ |
@@ -62,3 +65,13 @@ Al construir el test de equilibrio dinámico de `degradation.py`, se detectó qu
 **Corrección**: se introdujo `PropensityExhausted` (subclase de `SimulationEnded`) para el caso realmente permanente (propensidad total = 0), dejando `SimulationEnded` genérico para el caso de `max_time`, que ahora es una pausa reanudable. `engine/debugger.py` se actualizó igual, distinguiendo ambos casos en `has_ended`.
 
 Tests de regresión añadidos: `test_max_time_is_a_resumable_pause_not_a_permanent_end` y `test_exhaustion_remains_permanent_unlike_max_time` en `test_ssa.py`; `test_max_time_pause_does_not_mark_debugger_as_permanently_ended` en `test_debugger.py`.
+
+---
+
+## Nota: bug corregido en `cell.py` (detectado al cerrar la sincronización Cell↔undo)
+
+Al implementar `_truncate_events_to()` para que `cell.debug().undo_to()` recortara también el histórico de la propia `Cell`, la primera versión **reasignaba** `self._events` a una lista nueva en cada recorte. Pero el callback `on_event` que `Cell.debug()` le pasa al `Debugger` es `self._events.append` — un método ya vinculado a la lista *original* en el momento de crear el `Debugger`. Al reasignar `self._events` a una lista nueva, ese callback seguía apuntando a la lista vieja, huérfana: cualquier evento nuevo tras un `undo_to()` dejaba de aparecer en `cell.get_events()`, aunque sí aparecía en `debugger.history()`.
+
+**Corrección**: `_truncate_events_to()` muta la lista en el mismo sitio (`self._events[:] = [...]`, slice assignment) en vez de reasignarla, preservando la referencia que el callback ya tiene vinculada.
+
+Test de regresión: `test_multiple_undo_and_redo_cycles_stay_consistent` en `test_cell_debug_undo.py` — sin este test (que encadena varios ciclos de avance/retroceso) el bug no se habría detectado, porque un solo retroceso sin avanzar después no lo manifiesta.

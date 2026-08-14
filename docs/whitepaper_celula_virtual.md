@@ -301,7 +301,7 @@ Este esquema es, además, un prerrequisito silencioso para poder exportar e impo
 | **5** | Interfaz de depuración pulida + visualización básica | Depurador usable cómodamente (terminal enriquecida o notebook), gráficas de trayectorias enlazadas con el log de eventos |
 | **5.1** | Visualización en tiempo real del espacio de propensidades | ✅ Cumplido — `engine/propensity_view.py`. Render con `rich` si está disponible; fallback a texto plano verificado en un entorno real sin `rich` instalado |
 | **5.2** | Análisis causal retrospectivo (sección 4.5) | ✅ Cumplido — `engine/forensics.py`. Verificado sobre una simulación real: identifica correctamente `transcribe_target` como productor y `degrade_mRNA_target` como consumidor de `mRNA_target` |
-| **5.3** | Retroceso (undo de reacciones) | Deshacer una o varias reacciones y volver a un estado anterior reproducible, vía snapshots periódicos del estado + semilla aleatoria |
+| **5.3** | Retroceso (undo de reacciones) | ✅ Cumplido — `engine/snapshot.py` + `Debugger.undo_to()`. Verificado que retroceder y reproducir genera exactamente la misma secuencia de eventos ya ocurrida. La sincronización `Cell`↔`undo` (`cell.debug().undo_to()` recortando también `cell.get_events()`) quedó cerrada en una iteración posterior — ver `cell.py` en la tabla de control, incluye un bug real detectado y corregido durante esa integración |
 | **6** | Prueba de escalabilidad | Cargar un genoma anotado real de decenas/cientos de genes (descargado de una base de datos pública) y confirmar que el `GenomeModule` genera las reacciones correctamente sin cambios de código; perfilar el rendimiento resultante |
 
 ---
