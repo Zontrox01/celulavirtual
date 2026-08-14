@@ -130,9 +130,10 @@ Construidos sobre la capa 1, cada uno aporta especies y reacciones al motor:
 3. **`TranslationModule`** — Unión de ribosoma al ARNm → elongación codón a codón (código genético real vía BioPython) → terminación → liberación de proteína. Consume aminoácidos y GTP/ATP.
 4. **`DegradationModule`** — Degradación estocástica de ARNm y proteínas según tasas de vida media conocidas.
 5. **`MetabolismModule`** — Red mínima de reacciones (glucólisis simplificada) que repone los precursores consumidos por transcripción/traducción. Punto de acoplamiento energético del modelo.
+6. **`RegulationModule`** *(no prevista en el diseño original de esta sección; añadida en la Fase 2)* — Represión transcripcional reversible: un represor ya traducido puede unirse a un gen ya transcrito, formando un complejo reprimido que bloquea su transcripción mientras dura la unión. Se modela como un interruptor de dos estados (gen libre ↔ gen reprimido), reutilizando la reacción de transcripción que ya instala `GenomeModule` sin necesidad de modificarla: al unirse el represor, la copia libre del gen pasa a 0 y la propensidad de transcripción cae a 0 de forma natural.
 
 **Nota de implementación (Fase 1, MVP)**: `GenomeModule` se implementó modelando la transcripción como un **único paso estocástico** (RNAP + gen → RNAP + gen + ARNm), en vez de la cadena unión→elongación→terminación descrita arriba para `TranscriptionModule`. Es el modelo de "dos etapas" estándar en expresión génica estocástica (transcripción de un paso + traducción de un paso), con precedente amplio en la literatura (p. ej. Thattai & van Oudenaarden, 2001). La elongación explícita, con sus propios estados intermedios, queda como refinamiento futuro de `transcription.py` sin romper la interfaz actual: seguiría generándose "una reacción de transcripción por gen" desde `GenomeModule`, solo que seria el paso final de una cadena más larga en vez del único paso.
-6. **`ReplicationModule`** — Dispara replicación del ADN y división celular cuando se cumplen condiciones, con segregación binomial de especies entre células hijas.
+6. **`ReplicationModule`** — Dispara replicación del ADN y división celular cuando se cumplen condiciones, con segregación binomial de especies entre células hijas. **Aviso de implementación**: con reparto binomial puro y una única copia de gen antes de dividirse, una de las dos hijas puede quedarse sin ninguna copia funcional de ese gen. Se incluye `replicate_gene_copies()` para duplicar las copias de gen justo antes de dividir (representando que la replicación del ADN ya ha ocurrido), sin modelar el mecanismo de replicación paso a paso — misma simplificación deliberada que en el resto de módulos de la Fase 1.
 
 ### Capa 3 — Orquestador `Cell` + interfaz de depuración
 Clase que compone los módulos activos, mantiene el estado global, y expone tanto ejecución normal como depuración:
@@ -173,7 +174,8 @@ celula-virtual/
 │   ├── translation.py     # TranslationModule
 │   ├── degradation.py     # DegradationModule
 │   ├── metabolism.py      # MetabolismModule
-│   └── replication.py     # ReplicationModule
+│   ├── replication.py     # ReplicationModule
+│   └── regulation.py      # RegulationModule (no prevista originalmente)
 ├── data_io/             # Carga y exportación de datos
 │   ├── genome_loader.py   # Lectura de FASTA + anotación (sección 6.2)
 │   └── sbml_io.py         # Import/export SBML (sección 7)
@@ -293,13 +295,13 @@ Este esquema es, además, un prerrequisito silencioso para poder exportar e impo
 | **0** | Motor SSA propio (como generador/iterador) + clase `Cell` esqueleto | Simular una reacción de prueba (A + B → C) reacción a reacción, verificando que la distribución estocástica converge al comportamiento esperado |
 | **0.5** | Capa de depuración sobre el motor de la Fase 0 | Poder pausar, hacer step, poner un breakpoint simple, e inspeccionar el estado — sobre el sistema de prueba |
 | **1** | Transcripción/traducción de 1 gen | Observar aparición y degradación de ARNm y proteína, y poder depurar por qué ocurrió cada evento |
-| **2** | Varios genes + regulación simple | Dinámica de un represor afectando otro gen; usar el depurador para explicar un caso concreto (ej. "por qué se bloqueó la transcripción en el instante t") |
-| **3** | Metabolismo mínimo acoplado (ATP) | La expresión génica se ralentiza si el ATP cae; breakpoint de ejemplo: pausar cuando ATP < umbral |
-| **4** | Replicación de ADN + división celular | Ciclo celular completo con reparto estocástico de moléculas entre células hijas |
+| **2** | Varios genes + regulación simple | ✅ Cumplido — `biology/regulation.py`. Dinámica de un represor afectando otro gen: comparación directa con/sin represión activa muestra una reducción drástica del ARNm del gen diana (ej. 1968 → 1 en una simulación de prueba con represión fuerte) |
+| **3** | Metabolismo mínimo acoplado (ATP) | ✅ Cumplido — `biology/metabolism.py` + acoplamiento opcional en `genome.py`/`translation.py`. Comparación con/sin reposición de ATP: 524 vs 5 ARNm en una simulación de prueba. Breakpoint de ejemplo (`ATP < umbral`) reproducido con el depurador de la Fase 0.5 |
+| **4** | Replicación de ADN + división celular | ✅ Cumplido — `biology/replication.py`. Ciclo celular completo verificado: transcripción + traducción hasta umbral de masa proteica → división con reparto binomial → ambas hijas continúan la simulación de forma independiente |
 | **5** | Interfaz de depuración pulida + visualización básica | Depurador usable cómodamente (terminal enriquecida o notebook), gráficas de trayectorias enlazadas con el log de eventos |
-| **5.1** | Visualización en tiempo real del espacio de propensidades | Ver, en cada pausa, el peso relativo de todas las reacciones candidatas, no solo la disparada |
-| **5.2** | Análisis causal retrospectivo (sección 4.5) | Dado un evento del log, reconstruir hacia atrás qué reacciones y qué genes contribuyeron a ese estado |
-| **5.3** | Retroceso (undo de reacciones) | Deshacer una o varias reacciones y volver a un estado anterior reproducible, vía snapshots periódicos del estado + semilla aleatoria |
+| **5.1** | Visualización en tiempo real del espacio de propensidades | ✅ Cumplido — `engine/propensity_view.py`. Render con `rich` si está disponible; fallback a texto plano verificado en un entorno real sin `rich` instalado |
+| **5.2** | Análisis causal retrospectivo (sección 4.5) | ✅ Cumplido — `engine/forensics.py`. Verificado sobre una simulación real: identifica correctamente `transcribe_target` como productor y `degrade_mRNA_target` como consumidor de `mRNA_target` |
+| **5.3** | Retroceso (undo de reacciones) | ✅ Cumplido — `engine/snapshot.py` + `Debugger.undo_to()`. Verificado que retroceder y reproducir genera exactamente la misma secuencia de eventos ya ocurrida. La sincronización `Cell`↔`undo` (`cell.debug().undo_to()` recortando también `cell.get_events()`) quedó cerrada en una iteración posterior — ver `cell.py` en la tabla de control, incluye un bug real detectado y corregido durante esa integración |
 | **6** | Prueba de escalabilidad | Cargar un genoma anotado real de decenas/cientos de genes (descargado de una base de datos pública) y confirmar que el `GenomeModule` genera las reacciones correctamente sin cambios de código; perfilar el rendimiento resultante |
 
 ---
@@ -363,3 +365,7 @@ El proyecto se desarrollará públicamente en **GitHub** desde la Fase 0, no com
 - Abel, J.H. et al. / GillesPy2 documentation (StochSS project) — referencia de por qué las librerías SSA existentes no exponen ejecución paso a paso de forma nativa.
 
 ---
+
+## Próximo paso
+
+Con este documento como referencia, el siguiente paso es implementar la **Fase 0**: el motor SSA propio, escrito como generador/iterador en Python, validado contra un sistema químico de prueba simple — sentando la base sobre la que se construirá la capa de depuración en la Fase 0.5.
