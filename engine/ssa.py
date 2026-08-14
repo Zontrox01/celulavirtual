@@ -178,7 +178,7 @@ class GillespieSSA:
         Atajo de conveniencia: ejecuta hasta max_steps pasos (o hasta que
         la simulación termine sola), devolviendo la lista de eventos.
         Para control fino paso a paso, usar step() directamente
-        (es lo que hará engine/debugger.py en la Fase 0.5).
+        (es lo que hace engine/debugger.py).
         """
         events: List[SSAEvent] = []
         for i, event in enumerate(self):
@@ -186,3 +186,35 @@ class GillespieSSA:
             if max_steps is not None and (i + 1) >= max_steps:
                 break
         return events
+
+    @property
+    def ended(self) -> bool:
+        """True si la simulación ha terminado de forma permanente (propensidad total = 0)."""
+        return self._ended
+
+    def get_full_state(self) -> dict:
+        """
+        Estado completo y reproducible: especies, estado del generador
+        aleatorio, tiempo, número de pasos. Restaurar este estado y
+        volver a llamar a step() reproduce EXACTAMENTE la misma
+        secuencia de eventos que ya ocurrió a partir de aquí (mismo
+        generador + mismo estado -> mismos sorteos). Es la base del
+        retroceso (undo) del depurador (whitepaper, secciones 4.4.b
+        y 5.3): en vez de invertir matemáticamente cada reacción, se
+        restaura un snapshot cercano y se reproduce hacia adelante.
+        """
+        return {
+            "species": self.species.snapshot(),
+            "rng_state": self._rng.getstate(),
+            "time": self.time,
+            "step_count": self.step_count,
+            "ended": self._ended,
+        }
+
+    def restore_full_state(self, state: dict) -> None:
+        """Restaura un estado devuelto por get_full_state(), incluido el generador aleatorio."""
+        self.species.restore(state["species"])
+        self._rng.setstate(state["rng_state"])
+        self.time = state["time"]
+        self.step_count = state["step_count"]
+        self._ended = state["ended"]

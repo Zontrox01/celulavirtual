@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional
 
 from engine.ssa import GillespieSSA, SSAEvent, SimulationEnded, PropensityExhausted
+from engine.snapshot import SnapshotStore
 
 
 BreakpointCondition = Callable[[Dict[str, int]], bool]
@@ -58,12 +59,21 @@ class Debugger:
     usa cell.py para mantener sincronizado su propio histórico de
     eventos cuando la ejecución pasa por el modo depurado en vez de
     por run(), de forma que get_trajectory() vea también esos eventos.
+
+    `on_undo`: callback opcional invocado tras un undo_to(step_count)
+    exitoso, con ese mismo step_count. Simétrico a `on_event`: lo usa
+    cell.py para recortar también su propio histórico de eventos al
+    retroceder, de forma que cell.get_events()/get_trajectory() queden
+    consistentes con el estado real del motor tras el retroceso.
     """
 
     def __init__(
         self,
         ssa: GillespieSSA,
         on_event: Optional[Callable[[SSAEvent], None]] = None,
+        on_undo: Optional[Callable[[int], None]] = None,
+        enable_snapshots: bool = False,
+        snapshot_interval: int = 50,
     ) -> None:
         self._ssa = ssa
         self._history: List[SSAEvent] = []
@@ -71,6 +81,10 @@ class Debugger:
         self._last_triggered_breakpoint: Optional[str] = None
         self._ended = False
         self._on_event = on_event
+        self._on_undo = on_undo
+        self._snapshot_store: Optional[SnapshotStore] = (
+            SnapshotStore(ssa, interval=snapshot_interval) if enable_snapshots else None
+        )
 
     # ------------------------------------------------------------------
     # Breakpoints
@@ -129,6 +143,8 @@ class Debugger:
             self._history.append(event)
             if self._on_event is not None:
                 self._on_event(event)
+            if self._snapshot_store is not None:
+                self._snapshot_store.maybe_snapshot()
 
             triggered = self._check_breakpoints()
             if triggered is not None:
@@ -156,6 +172,53 @@ class Debugger:
             if self._last_triggered_breakpoint is not None:
                 break
         return executed
+
+    # ------------------------------------------------------------------
+    # Retroceso (undo) — whitepaper, secciones 4.4.b y 5.3
+    # ------------------------------------------------------------------
+
+    @property
+    def snapshots_enabled(self) -> bool:
+        return self._snapshot_store is not None
+
+    def undo_to(self, step_count: int) -> int:
+        """
+        Retrocede la simulación hasta exactamente el paso `step_count`
+        (0 = estado inicial, antes de cualquier reacción). Requiere
+        haber creado el Debugger con enable_snapshots=True.
+
+        Internamente restaura el snapshot más cercano anterior o igual
+        y reproduce hacia adelante de forma determinista (mismo
+        generador aleatorio) hasta llegar exactamente ahí — no es una
+        simulación nueva, es la misma que ya ocurrió.
+
+        Tras el retroceso, el histórico del depurador (`history()`)
+        también se recorta para reflejar solo lo ocurrido hasta ese
+        paso, y el estado de "terminado" se sincroniza con el del
+        motor restaurado.
+        """
+        if self._snapshot_store is None:
+            raise DebuggerEndedError(
+                "Este depurador no tiene snapshots activados. "
+                "Crea el Debugger con enable_snapshots=True para poder usar undo_to()."
+            )
+
+        self._snapshot_store.rewind_to(step_count)
+
+        self._history = [e for e in self._history if e.step <= step_count]
+        self._ended = self._ssa.ended
+        self._last_triggered_breakpoint = None
+
+        if self._on_undo is not None:
+            self._on_undo(step_count)
+
+        return step_count
+
+    def available_snapshot_steps(self) -> List[int]:
+        """Los pasos a los que se puede retroceder directamente sin reproducir (para inspección)."""
+        if self._snapshot_store is None:
+            return []
+        return self._snapshot_store.snapshot_steps()
 
     # ------------------------------------------------------------------
     # Inspección
