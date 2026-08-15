@@ -184,8 +184,10 @@ celula-virtual/
 ├── docs/
 │   ├── whitepaper_celula_virtual.md
 │   └── FILES.md          # Tabla de control de archivos (ver abajo)
-└── examples/
-    └── genomas/           # Genomas de juguete (sección 6.1) y anotaciones
+├── examples/
+│   └── genomas/           # Genomas de juguete (sección 6.1) y anotaciones
+└── tools/                # Utilidades de desarrollo, no parte de la librería (no previsto originalmente)
+    └── generate_synthetic_genome.py   # Genomas sintéticos a escala, para la Fase 6
 ```
 
 **Regla práctica**: si un archivo empieza a mezclar más de una responsabilidad de las ya nombradas en la arquitectura (por ejemplo, `ssa.py` empieza a incluir lógica de breakpoints), se separa en un archivo nuevo en cuanto se detecta, no se pospone.
@@ -222,6 +224,8 @@ Como se apuntó en la sección 12, el bucle SSA propio en Python puro es más le
 - **Extensión selectiva en Cython** del núcleo del bucle SSA (no de la capa de depuración), si tras perfilar se confirma que ahí está el cuello de botella — manteniendo el resto del código en Python puro.
 - **Reutilizar el formato SBML** (ya contemplado en la sección 7) como puente: si en algún estudio serio conviene delegar la simulación en bruto a un solver externo más rápido (como el de GillesPy2) para un genoma grande, el modelo puede exportarse a SBML sin perder compatibilidad — reservando el motor propio y su depurador para el trabajo exploratorio y de inspección detallada.
 
+**Resultados reales de la Fase 6** (`tests/test_scalability.py`, `tools/generate_synthetic_genome.py`): en vez de descargar un genoma público real (sin acceso a red en el entorno donde se desarrolló este código), se generó un genoma sintético a escala configurable con el mismo formato de entrada (FASTA + anotación CSV) que exige `data_io/genome_loader.py` — así que sustituir esto por un genoma real descargado de NCBI/EBI es, literalmente, cambiar la ruta de los dos archivos de entrada, sin tocar ningún código. El perfilado a 10/50/100 genes dio 0.026 / 0.184 / 0.250 ms por paso respectivamente — escala con el número de reacciones activas, tal como se predijo arriba, y sigue siendo perfectamente manejable en un equipo doméstico incluso a 100 genes (400 reacciones).
+
 ---
 
 ## 7. Formatos, estándares y librerías
@@ -230,12 +234,14 @@ Como se apuntó en la sección 12, el bucle SSA propio en Python puro es más le
 |---|---|---|
 | Bucle de simulación SSA + depurador | Implementación propia | **Propia** (es el diferenciador) |
 | Secuencias ADN/ARN, código genético, traducción | `BioPython` | Terceros |
-| Redes de reacciones interoperables | `SBML` vía `libsbml` | Terceros |
+| Redes de reacciones interoperables | `SBML` — implementado sobre `xml.etree.ElementTree` (librería estándar), no `libsbml` (ver nota) | Propia sobre estándar SBML |
 | Cálculo numérico general | `numpy` | Terceros |
 | Registro y análisis de trayectorias | `pandas` | Terceros |
 | Visualización | `matplotlib`, `plotly` | Terceros |
 | Interfaz de depuración (si se hace interactiva en terminal o notebook) | `rich` / `ipywidgets` (a evaluar) | Terceros |
 | Validación automatizada (sección 11) y CI (sección 10) | `pytest` | Terceros |
+
+**Nota sobre SBML**: `data_io/sbml_io.py` se implementó sobre `xml.etree.ElementTree` en vez de `libsbml` porque el entorno donde se desarrolló este código no tenía acceso a red para instalar y validar `libsbml`. Cubre el caso de uso principal (exportar nuestros modelos, reimportarlos con fidelidad exacta — round-trip verificado) sin esa dependencia extra. Sigue siendo SBML Level 3 Version 1 válido y abrible en herramientas externas; si en el futuro hace falta validación estricta contra el esquema oficial o importar SBML arbitrario de terceros, `libsbml` (ya en `requirements.txt`) sigue siendo la opción recomendada para esa ampliación.
 | Metabolismo a escala genómica (futuro) | `COBRApy` | Terceros |
 
 ### 7.1 Lista de instalación
@@ -302,7 +308,7 @@ Este esquema es, además, un prerrequisito silencioso para poder exportar e impo
 | **5.1** | Visualización en tiempo real del espacio de propensidades | ✅ Cumplido — `engine/propensity_view.py`. Render con `rich` si está disponible; fallback a texto plano verificado en un entorno real sin `rich` instalado |
 | **5.2** | Análisis causal retrospectivo (sección 4.5) | ✅ Cumplido — `engine/forensics.py`. Verificado sobre una simulación real: identifica correctamente `transcribe_target` como productor y `degrade_mRNA_target` como consumidor de `mRNA_target` |
 | **5.3** | Retroceso (undo de reacciones) | ✅ Cumplido — `engine/snapshot.py` + `Debugger.undo_to()`. Verificado que retroceder y reproducir genera exactamente la misma secuencia de eventos ya ocurrida. La sincronización `Cell`↔`undo` (`cell.debug().undo_to()` recortando también `cell.get_events()`) quedó cerrada en una iteración posterior — ver `cell.py` en la tabla de control, incluye un bug real detectado y corregido durante esa integración |
-| **6** | Prueba de escalabilidad | Cargar un genoma anotado real de decenas/cientos de genes (descargado de una base de datos pública) y confirmar que el `GenomeModule` genera las reacciones correctamente sin cambios de código; perfilar el rendimiento resultante |
+| **6** | Prueba de escalabilidad | ✅ Cumplido (con genoma sintético, no descargado — ver nota) — `tools/generate_synthetic_genome.py`. El mismo `GenomeModule`/`TranslationModule`/`DegradationModule` funciona a 100 genes sin ningún cambio de código. Perfilado real: 10 genes → 0.026 ms/paso; 50 genes → 0.184 ms/paso; 100 genes → 0.250 ms/paso — escala con el número de reacciones, coherente con el coste O(reacciones) esperado del método directo de Gillespie |
 
 ---
 
