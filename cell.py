@@ -100,20 +100,44 @@ class Cell:
         self._events.extend(new_events)
         return new_events
 
-    def debug(self) -> Debugger:
+    def debug(self, enable_snapshots: bool = False, snapshot_interval: int = 50) -> Debugger:
         """
         Punto de entrada a la ejecución depurada: paso a paso,
-        breakpoints, inspección de propensidades (whitepaper, sección 4).
+        breakpoints, inspección de propensidades, y opcionalmente
+        retroceso (undo) si enable_snapshots=True (whitepaper, sección
+        4, y secciones 4.4.b/5.3 para el retroceso).
 
         El Debugger devuelto envuelve el mismo motor SSA que usa run(),
-        y se le pasa un callback para que cada evento ejecutado ahí se
-        añada también al histórico de la propia Cell — así run() y
-        debug() pueden alternarse sin perder eventos, y get_trajectory()
-        ve la simulación completa independientemente de por qué modo
-        se haya avanzado cada paso.
+        con dos callbacks de sincronización:
+          - on_event: cada evento nuevo se añade también al histórico
+            de la propia Cell, para que run() y debug() puedan
+            alternarse sin perder eventos.
+          - on_undo: al retroceder (undo_to()), el histórico de la
+            propia Cell se recorta igual que el del depurador, para
+            que get_events()/get_trajectory() sigan siendo coherentes
+            con el estado real del motor tras el retroceso.
         """
         ssa = self._ensure_ssa()
-        return Debugger(ssa, on_event=self._events.append)
+        return Debugger(
+            ssa,
+            on_event=self._events.append,
+            on_undo=self._truncate_events_to,
+            enable_snapshots=enable_snapshots,
+            snapshot_interval=snapshot_interval,
+        )
+
+    def _truncate_events_to(self, step_count: int) -> None:
+        """
+        Recorta el histórico de eventos de la célula a los ocurridos
+        hasta step_count (inclusive).
+
+        Importante: se muta la lista en el mismo sitio (slice
+        assignment), NO se reasigna self._events a una lista nueva —
+        el callback on_event que se le pasó al Debugger (self._events.append)
+        quedaría apuntando a la lista vieja si se reasignara, y los
+        eventos posteriores a un undo dejarían de sincronizarse.
+        """
+        self._events[:] = [e for e in self._events if e.step <= step_count]
 
     # ------------------------------------------------------------------
     # Consulta de resultados
