@@ -15,14 +15,14 @@ Documento vivo. Se actualiza cada vez que se crea o modifica un archivo relevant
 | `engine/forensics.py` | Análisis causal retrospectivo ("modo forense", sección 4.5) — `ForensicsAnalyzer.analyze_species()` | 1 — Motor | 5.2 | ✅ |
 | `engine/snapshot.py` | Snapshots de estado + retroceso (undo) — `SnapshotStore`, reproducción determinista desde el snapshot más cercano | 1 — Motor | 5.3 | ✅ |
 | `biology/genome.py` | `GenomeModule` — instala especies/reacciones de transcripción; acoplamiento energético opcional a ATP (Fase 3) | 2 — Biología | 1 / 3 | ✅ |
-| `biology/transcription.py` | `TranscriptionModule` — ARN-pol, elongación, terminación | 2 — Biología | 1 | 🔲 |
+| `biology/transcription.py` | No se implementa como archivo aparte — absorbido por la transcripción de un paso de `biology/genome.py` (ver nota de implementación de la Fase 1, whitepaper sección 5). Reaparecería solo si se decide modelar elongación explícita en el futuro | 2 — Biología | 1 | N/A (decisión de diseño, no pendiente) |
 | `biology/translation.py` | `TranslationModule` — instala proteínas y reacciones de traducción; acoplamiento energético opcional a ATP (Fase 3) | 2 — Biología | 1 / 3 | ✅ |
 | `biology/degradation.py` | `DegradationModule` — reacciones de degradación de un paso para ARNm y proteínas, por vida media | 2 — Biología | 1 | ✅ |
 | `biology/regulation.py` | `RegulationModule` — represión transcripcional reversible (unión/disociación represor-gen), no prevista en el diseño original | 2 — Biología | 2 | ✅ |
 | `biology/metabolism.py` | `MetabolismModule` — importación de glucosa + glicólisis simplificada (opcionalmente catalizada por una enzima ya traducida), produce el ATP del acoplamiento energético | 2 — Biología | 3 | ✅ |
 | `biology/replication.py` | `ReplicationModule` — condición de división + reparto binomial de especies entre 2 células hijas | 2 — Biología | 4 | ✅ |
 | `data_io/genome_loader.py` | Carga de genoma desde FASTA + anotación GFF3/CSV (sección 6.2) | I/O | 0 | ✅ |
-| `data_io/sbml_io.py` | Import/export de modelos en formato SBML (sección 7) | I/O | — | 🔲 |
+| `data_io/sbml_io.py` | Import/export SBML — escrito sobre `xml.etree.ElementTree` (no `libsbml`), round-trip fiel para nuestro propio convenio | I/O | — | ✅ |
 | `cell.py` | Orquestador `Cell` — compone módulos, API pública, modo normal y depurado, incluido `undo` sincronizado | 3 — Orquestador | 0 / 0.5 / 5.3 | ✅ (`run()`, `get_trajectory()`, `debug()` con `on_event`/`on_undo` sincronizados) |
 | `tests/test_ssa.py` | Validación mecánica (conservación, monotonía, reproducibilidad) y estadística (tiempo de espera exponencial, elección proporcional a propensidad) del motor SSA — 10 casos | Tests | 0 | ✅ |
 | `tests/test_species.py` | Validación unitaria de `engine/species.py` (13 casos, sin pytest disponible en este entorno: ejecutados con `assert` puro) | Tests | 0 | ✅ |
@@ -47,6 +47,9 @@ Documento vivo. Se actualiza cada vez que se crea o modifica un archivo relevant
 | `docs/whitepaper_celula_virtual.md` | Documento de diseño del proyecto (decisiones, arquitectura, roadmap) | Docs | — | ✅ |
 | `docs/FILES.md` | Este documento — mapa vivo del repositorio | Docs | — | 🟡 |
 | `requirements.txt` | Dependencias Python del proyecto, agrupadas por fase (whitepaper, sección 7.1) | Docs | 0 | ✅ |
+| `tools/generate_synthetic_genome.py` | Genera genomas sintéticos a escala configurable (FASTA + anotación), para la prueba de escalabilidad de la Fase 6; directorio `tools/` no previsto en la arquitectura original | Herramientas | 6 | ✅ |
+| `tests/test_scalability.py` | Fase 6: mismo código funcionando a 100 genes sin modificar, y perfilado real de rendimiento (10/50/100 genes) (6 casos) | Tests | 6 | ✅ |
+| `tests/test_sbml_io.py` | Validación de `data_io/sbml_io.py` — round-trip exacto (exportar → reimportar → mismo comportamiento), archivo, errores (12 casos) | Tests | — | ✅ |
 
 ---
 
