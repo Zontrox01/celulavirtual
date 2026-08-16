@@ -80,12 +80,14 @@ class DebuggerPanel(QWidget):
         self._step_n_spin.setRange(1, 100_000)
         self._step_n_spin.setValue(1)
         step_button = QPushButton("Avanzar N pasos")
+        step_button.setObjectName("success")
         step_button.clicked.connect(self._step)
         step_row.addWidget(self._step_n_spin)
         step_row.addWidget(step_button)
         step_layout.addLayout(step_row)
 
         run_until_bp_button = QPushButton("Avanzar hasta el próximo breakpoint")
+        run_until_bp_button.setObjectName("success")
         run_until_bp_button.clicked.connect(self._run_until_breakpoint)
         step_layout.addWidget(run_until_bp_button)
 
@@ -118,6 +120,7 @@ class DebuggerPanel(QWidget):
         breakpoints_layout.addWidget(self._breakpoints_list)
 
         remove_bp_button = QPushButton("Quitar seleccionado")
+        remove_bp_button.setObjectName("danger")
         remove_bp_button.clicked.connect(self._remove_selected_breakpoint)
         breakpoints_layout.addWidget(remove_bp_button)
 
@@ -129,6 +132,7 @@ class DebuggerPanel(QWidget):
         self._undo_step_spin = QSpinBox()
         self._undo_step_spin.setRange(0, 10_000_000)
         undo_button = QPushButton("Retroceder al paso")
+        undo_button.setObjectName("danger")
         undo_button.clicked.connect(self._undo_to)
         undo_layout.addWidget(self._undo_step_spin)
         undo_layout.addWidget(undo_button)

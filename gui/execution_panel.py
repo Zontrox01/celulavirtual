@@ -100,6 +100,7 @@ class ExecutionPanel(QWidget):
         division_layout.addLayout(threshold_row)
 
         divide_button = QPushButton("Dividir célula (si se cumple la condición)")
+        divide_button.setObjectName("danger")
         divide_button.clicked.connect(self._divide_cell)
         division_layout.addWidget(divide_button)
 

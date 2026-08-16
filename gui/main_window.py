@@ -14,8 +14,10 @@ interacción con él.
 
 from __future__ import annotations
 
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QMainWindow, QTabWidget, QFileDialog, QMessageBox,
+    QWidget, QVBoxLayout, QLabel,
 )
 
 from gui.app_state import AppState, AppStateError
@@ -23,18 +25,38 @@ from gui.genome_setup_panel import GenomeSetupPanel
 from gui.execution_panel import ExecutionPanel
 from gui.debugger_panel import DebuggerPanel
 from gui.forensics_panel import ForensicsPanel
+from gui.theme import BLUE, TEXT_MUTED
 
 
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Célula Virtual")
-        self.resize(1200, 800)
+        self.resize(1280, 840)
 
         self._app_state = AppState()
 
+        central = QWidget()
+        central_layout = QVBoxLayout(central)
+        central_layout.setContentsMargins(16, 12, 16, 12)
+        central_layout.setSpacing(10)
+
+        title_label = QLabel("🧬  Célula Virtual")
+        title_font = QFont("Segoe UI", 18, QFont.Weight.DemiBold)
+        title_label.setFont(title_font)
+        title_label.setStyleSheet(f"color: {BLUE};")
+        central_layout.addWidget(title_label)
+
+        subtitle_label = QLabel(
+            "Simulación biofísica de una célula mínima — motor de Gillespie propio, con depurador interactivo"
+        )
+        subtitle_label.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 12px;")
+        central_layout.addWidget(subtitle_label)
+
         self._tabs = QTabWidget()
-        self.setCentralWidget(self._tabs)
+        central_layout.addWidget(self._tabs, stretch=1)
+
+        self.setCentralWidget(central)
 
         self._genome_panel = GenomeSetupPanel(self._app_state)
         self._execution_panel = ExecutionPanel(self._app_state)
