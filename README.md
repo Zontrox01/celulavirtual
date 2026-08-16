@@ -126,7 +126,7 @@ Documentadas en detalle en la sección 12 del whitepaper. Las más relevantes:
 
 ## Licencia
 
-Por decidir (candidatas: MIT o GPLv3 — esta última es la que usa E-Cell4, lo que facilitaría eventuales colaboraciones cruzadas). Ver sección 10 del whitepaper.
+GPLv3  (Es la que usa E-Cell4, lo que facilitaría eventuales colaboraciones cruzadas). Ver sección 10 del whitepaper.
 
 ## Contribuir
 
