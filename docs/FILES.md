@@ -44,12 +44,24 @@ Documento vivo. Se actualiza cada vez que se crea o modifica un archivo relevant
 | `tests/test_forensics.py` | Validación de `engine/forensics.py` — ventanas temporales, contribuciones netas, catalizadores excluidos, identificación real de productor/consumidor en una simulación (12 casos) | Tests | 5.2 | ✅ |
 | `examples/genomas/toy_genome.fasta` | Genoma de juguete: 4 genes (2 ribosomales, 1 metabólico, 1 regulador) | Datos | 1 | ✅ |
 | `examples/genomas/toy_genome_annotation.csv` | Anotación de los 4 genes (posición, hebra, promoter_id) | Datos | 1 | ✅ |
+| `README.md` | Presentación del proyecto para GitHub: qué es, instalación, uso rápido, estructura, estado, limitaciones | Docs | — | ✅ (ejemplos de código verificados) |
 | `docs/whitepaper_celula_virtual.md` | Documento de diseño del proyecto (decisiones, arquitectura, roadmap) | Docs | — | ✅ |
 | `docs/FILES.md` | Este documento — mapa vivo del repositorio | Docs | — | 🟡 |
 | `requirements.txt` | Dependencias Python del proyecto, agrupadas por fase (whitepaper, sección 7.1) | Docs | 0 | ✅ |
 | `tools/generate_synthetic_genome.py` | Genera genomas sintéticos a escala configurable (FASTA + anotación), para la prueba de escalabilidad de la Fase 6; directorio `tools/` no previsto en la arquitectura original | Herramientas | 6 | ✅ |
+| `gui/app_state.py` | Estado de la aplicación GUI, independiente de Qt — toda la lógica de negocio (cargar genoma, ejecutar, depurar, dividir, SBML), testeable con `assert` puro | GUI | — (no prevista) | ✅ |
+| `gui/breakpoint_builder.py` | Construcción segura de condiciones de breakpoint desde valores de widgets, sin `eval()` | GUI | — (no prevista) | ✅ |
+| `gui/theme.py` | Tema oscuro: paleta de colores + hoja de estilos | GUI | — (no prevista) | 🟡 (sintaxis validada; no se puede ejecutar en este entorno, sin `PySide6` ni pantalla) |
+| `gui/simulation_worker.py` | Hilo (`QThread`) para ejecutar la simulación sin congelar la ventana | GUI | — (no prevista) | 🟡 (ídem) |
+| `gui/genome_setup_panel.py` | Pestaña "Genoma": carga de archivos, configuración de maquinaria/degradación/metabolismo, instalación | GUI | — (no prevista) | 🟡 (ídem) |
+| `gui/execution_panel.py` | Pestaña "Ejecución": correr, tabla de especies en vivo, gráfica de trayectoria (matplotlib embebido), división celular | GUI | — (no prevista) | 🟡 (ídem) |
+| `gui/debugger_panel.py` | Pestaña "Depurador": paso a paso, breakpoints, espacio de propensidades en vivo, retroceso | GUI | — (no prevista) | 🟡 (ídem) |
+| `gui/forensics_panel.py` | Pestaña "Forense": análisis causal retrospectivo sobre una especie y ventana temporal | GUI | — (no prevista) | 🟡 (ídem) |
+| `gui/main_window.py` | Ventana principal: une todas las pestañas + menú Archivo (exportar/importar SBML) | GUI | — (no prevista) | 🟡 (ídem) |
+| `gui/app.py` | Punto de entrada de la aplicación (`python -m gui.app`) | GUI | — (no prevista) | 🟡 (ídem) |
 | `tests/test_scalability.py` | Fase 6: mismo código funcionando a 100 genes sin modificar, y perfilado real de rendimiento (10/50/100 genes) (6 casos) | Tests | 6 | ✅ |
 | `tests/test_sbml_io.py` | Validación de `data_io/sbml_io.py` — round-trip exacto (exportar → reimportar → mismo comportamiento), archivo, errores (12 casos) | Tests | — | ✅ |
+| `tests/test_app_state.py` | Validación de `gui/app_state.py` — toda la lógica de la GUI sin Qt: metabolismo, regulación, división, SBML, depurador, forense (15 casos) | Tests | — (no prevista) | ✅ |
 
 ---
 
@@ -78,3 +90,13 @@ Al implementar `_truncate_events_to()` para que `cell.debug().undo_to()` recorta
 **Corrección**: `_truncate_events_to()` muta la lista en el mismo sitio (`self._events[:] = [...]`, slice assignment) en vez de reasignarla, preservando la referencia que el callback ya tiene vinculada.
 
 Test de regresión: `test_multiple_undo_and_redo_cycles_stay_consistent` en `test_cell_debug_undo.py` — sin este test (que encadena varios ciclos de avance/retroceso) el bug no se habría detectado, porque un solo retroceso sin avanzar después no lo manifiesta.
+
+---
+
+## Nota: GUI de escritorio (`gui/`) — PySide6, no PyQt6
+
+El directorio `gui/` no estaba previsto en la arquitectura original del whitepaper (sección 5.4 no contemplaba una interfaz gráfica de escritorio). Se añadió a petición explícita, con la decisión de diseño de mantener la lógica de negocio (`gui/app_state.py`, `gui/breakpoint_builder.py`) completamente separada de Qt, para poder testearla igual que el resto del proyecto.
+
+**Cambio de librería a mitad de desarrollo**: se empezó a construir con `PyQt6`, pero se corrigió a **`PySide6`** antes de entregar ningún archivo (petición del usuario tras detectar su propio error). Ambas son bindings de Qt6 y comparten casi toda la API (incluidos los enums con ámbito, como `QPalette.ColorRole.Window`); las únicas diferencias aplicadas fueron el nombre del paquete (`PyQt6` → `PySide6`) y el nombre de las señales (`pyqtSignal` → `Signal`).
+
+**Limitación de validación**: el entorno donde se desarrolló este código no tiene `PySide6` instalado ni servidor de pantalla, así que los archivos de Qt (`theme.py`, `simulation_worker.py`, `*_panel.py`, `main_window.py`, `app.py`) solo se pudieron validar por **sintaxis** (`python -m py_compile`) e inspección manual de la API — no se pudieron ejecutar ni ver renderizados. `gui/app_state.py` y `gui/breakpoint_builder.py`, al no depender de Qt, sí están completamente testeados (15 casos con `assert` real). Es importante que pruebes la GUI en tu máquina y me reportes cualquier error de ejecución que aparezca — con PySide6 real instalado es razonablemente probable que haya algún ajuste menor que hacer (nombres de método, orden de argumentos), aunque la lógica de fondo (`app_state.py`) ya está verificada.

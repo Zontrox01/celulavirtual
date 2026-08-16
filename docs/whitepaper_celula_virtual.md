@@ -186,8 +186,19 @@ celula-virtual/
 │   └── FILES.md          # Tabla de control de archivos (ver abajo)
 ├── examples/
 │   └── genomas/           # Genomas de juguete (sección 6.1) y anotaciones
-└── tools/                # Utilidades de desarrollo, no parte de la librería (no previsto originalmente)
-    └── generate_synthetic_genome.py   # Genomas sintéticos a escala, para la Fase 6
+├── tools/                # Utilidades de desarrollo, no parte de la librería (no previsto originalmente)
+│   └── generate_synthetic_genome.py   # Genomas sintéticos a escala, para la Fase 6
+└── gui/                  # Interfaz gráfica de escritorio (sección 14, no prevista originalmente)
+    ├── app_state.py        # Lógica de la GUI, independiente de Qt (testeable)
+    ├── breakpoint_builder.py  # Breakpoints sin eval()
+    ├── theme.py               # Tema oscuro
+    ├── simulation_worker.py   # Ejecución en QThread
+    ├── genome_setup_panel.py  # Pestaña Genoma
+    ├── execution_panel.py     # Pestaña Ejecución
+    ├── debugger_panel.py      # Pestaña Depurador
+    ├── forensics_panel.py     # Pestaña Forense
+    ├── main_window.py         # Ventana principal
+    └── app.py                 # Punto de entrada (`python -m gui.app`)
 ```
 
 **Regla práctica**: si un archivo empieza a mezclar más de una responsabilidad de las ya nombradas en la arquitectura (por ejemplo, `ssa.py` empieza a incluir lógica de breakpoints), se separa en un archivo nuevo en cuanto se detecta, no se pospone.
@@ -240,6 +251,7 @@ Como se apuntó en la sección 12, el bucle SSA propio en Python puro es más le
 | Visualización | `matplotlib`, `plotly` | Terceros |
 | Interfaz de depuración (si se hace interactiva en terminal o notebook) | `rich` / `ipywidgets` (a evaluar) | Terceros |
 | Validación automatizada (sección 11) y CI (sección 10) | `pytest` | Terceros |
+| Interfaz gráfica de escritorio (sección 14) | `PySide6` | Terceros |
 
 **Nota sobre SBML**: `data_io/sbml_io.py` se implementó sobre `xml.etree.ElementTree` en vez de `libsbml` porque el entorno donde se desarrolló este código no tenía acceso a red para instalar y validar `libsbml`. Cubre el caso de uso principal (exportar nuestros modelos, reimportarlos con fidelidad exacta — round-trip verificado) sin esa dependencia extra. Sigue siendo SBML Level 3 Version 1 válido y abrible en herramientas externas; si en el futuro hace falta validación estricta contra el esquema oficial o importar SBML arbitrario de terceros, `libsbml` (ya en `requirements.txt`) sigue siendo la opción recomendada para esa ampliación.
 | Metabolismo a escala genómica (futuro) | `COBRApy` | Terceros |
@@ -371,6 +383,48 @@ El proyecto se desarrollará públicamente en **GitHub** desde la Fase 0, no com
 - Abel, J.H. et al. / GillesPy2 documentation (StochSS project) — referencia de por qué las librerías SSA existentes no exponen ejecución paso a paso de forma nativa.
 
 ---
+
+## 14. Interfaz gráfica de escritorio (`gui/`)
+
+No prevista en la arquitectura original de este documento — añadida a petición explícita, con el requisito de no modificar el código ya construido salvo que fuera imprescindible (no lo fue: la GUI se apoya enteramente en la API pública ya existente de `Cell`, `Debugger`, los módulos biológicos, y `data_io/sbml_io.py`).
+
+### 14.1 Decisión de arquitectura: lógica separada de Qt
+
+Todo el "cerebro" de la aplicación vive en `gui/app_state.py` (clase `AppState`) y `gui/breakpoint_builder.py`, **sin ninguna dependencia de Qt**. Los archivos que sí dependen de Qt (`theme.py`, `simulation_worker.py`, `*_panel.py`, `main_window.py`, `app.py`) son envoltorios finos que solo conectan widgets a métodos de `AppState`, sin lógica de negocio propia. Esto reproduce, para la GUI, el mismo patrón ya usado en `engine/propensity_view.py` (sección 5.1): separar los datos de su representación visual, para poder testear lo importante sin depender del entorno gráfico.
+
+### 14.2 Estructura
+
+Una única ventana (`MainWindow`) con pestañas, en vez de varias ventanas separadas:
+
+- **Genoma** (`genome_setup_panel.py`): carga de FASTA + anotación, configuración de maquinaria (RNAP, ribosomas), vidas medias de degradación, y metabolismo opcional.
+- **Ejecución** (`execution_panel.py`): correr N pasos o N segundos (en un `QThread` aparte, para no congelar la ventana — ver 14.3), tabla de especies en vivo, gráfica de trayectoria (`matplotlib` embebido vía `FigureCanvasQTAgg`), y división celular.
+- **Depurador** (`debugger_panel.py`): paso a paso, breakpoints (construidos sin `eval()`, ver 14.4), visualización en vivo del espacio de propensidades, y retroceso (undo).
+- **Forense** (`forensics_panel.py`): análisis causal retrospectivo sobre una especie y una ventana temporal.
+- **Menú Archivo**: exportar/importar SBML.
+
+### 14.3 Ejecución en segundo plano
+
+Correr miles de pasos (o `max_time` largos) bloquearía la interfaz entera si se ejecutara en el mismo hilo donde Qt procesa los eventos de la ventana. `gui/simulation_worker.py` delega `run_steps()`/`run_time()` de `AppState` a un `QThread` aparte, emitiendo señales (`finished_run`, `error`) que la interfaz escucha de forma seguro entre hilos.
+
+### 14.4 Breakpoints sin `eval()`
+
+En vez de dejar que el usuario escriba una expresión Python arbitraria para el breakpoint (`s['ATP'] < 10`) y evaluarla con `eval()`, `gui/breakpoint_builder.py` construye la condición a partir de tres valores simples elegidos en la interfaz (especie, operador de comparación, umbral), sin ejecutar ningún texto. Aunque el código se ejecuta localmente en la máquina del propio usuario — donde `eval()` no sería un riesgo de seguridad en sentido estricto — evitarlo es una precaución barata que no cuesta nada y quita cualquier ambigüedad futura si este mecanismo se reutiliza en otro contexto.
+
+### 14.5 Limitación: metabolismo con enzima + acoplamiento a ATP no son combinables a la vez
+
+`GenomeSetupOptions.metabolism_mode` obliga a elegir entre metabolismo "de fondo" con acoplamiento a ATP en transcripción/traducción, o metabolismo catalizado por una enzima real (proteína de un gen ya traducido) — pero no ambos simultáneamente. No es una limitación de la GUI: es una restricción real del orden de instalación de los módulos ya existentes (`biology/genome.py`/`biology/translation.py` exigen que el ATP exista *antes* de instalarse si se quiere acoplamiento energético; `biology/metabolism.py` con enzima exige que la proteína catalizadora ya exista, lo cual solo ocurre *después* de instalar la traducción). Combinar ambas a la vez requeriría cambiar el orden de instalación de los módulos biológicos ya construidos y validados — se documenta como limitación conocida en vez de forzar un cambio en código ya probado, tal como se pidió.
+
+### 14.6 Sin soporte de multi-célula
+
+Al dividir una célula, se generan dos hijas (`biology/replication.py`), pero la GUI solo puede continuar la simulación con **una** de ellas (`AppState.adopt_daughter()`) — la otra se descarta de la vista, aunque el objeto `Cell` en sí sigue siendo válido si se quisiera usar por separado. Seguir el árbol genealógico completo de una población dividiéndose repetidamente queda fuera del alcance de esta interfaz (sería una extensión considerable: gestión de múltiples `Cell` simultáneas, cada una con su propio hilo de ejecución).
+
+### 14.7 Validación limitada por el entorno de desarrollo
+
+El entorno donde se escribió este código no tiene `PySide6` instalado ni servidor de pantalla, así que los archivos de Qt solo se pudieron validar por sintaxis (`python -m py_compile`) e inspección manual de la API — no se pudieron ejecutar ni ver renderizados. `gui/app_state.py` y `gui/breakpoint_builder.py`, al no depender de Qt, sí están completamente testeados con `assert` real (15 casos). Es esperable que aparezcan ajustes menores al ejecutar por primera vez en una máquina con `PySide6` real.
+
+---
+
+
 
 ## Próximo paso
 
