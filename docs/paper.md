@@ -1,0 +1,431 @@
+# Célula Virtual: Simulación Biofísica de una Célula Mínima con Depuración Interactiva
+
+**White paper de diseño — v0.2**
+**Fecha:** Agosto 2026
+
+---
+
+## Resumen ejecutivo
+
+Este documento define el diseño de un software en Python capaz de representar una célula virtual vacía, a la que se le puede añadir una secuencia de ADN, y observar la **dinámica temporal** resultante: expresión génica, metabolismo energético, replicación del ADN y división celular, simulado con **cinética química estocástica** (algoritmo de Gillespie).
+
+El proyecto se enmarca en la tradición de los *whole-cell models* de biología de sistemas — en particular el modelo de *Mycoplasma genitalium* (Karr et al., 2012) y su sucesor sobre la célula mínima sintética *JCVI-syn3A* (Covert Lab, Stanford, 2022) — pero incorpora un **elemento de innovación no presente en las herramientas existentes**: un **depurador interactivo** para la simulación biológica, que permite pausar la ejecución, inspeccionar reacción a reacción, y establecer condiciones de parada ("breakpoints") sobre el estado molecular de la célula — trayendo la metáfora de la depuración de software al terreno de la biología de sistemas.
+
+**No es un simulador de evolución darwiniana.** No hay mutación ni selección de poblaciones. El objetivo es observar y poder *inspeccionar en detalle* el ciclo de vida de una célula según las leyes de la cinética química.
+
+---
+
+## 1. Motivación y precedentes
+
+### 1.1 El estado del arte
+Los modelos de célula completa más relevantes son:
+
+- **E-Cell** (desde 1996) y su versión actual **E-Cell4**: plataforma de código abierto para modelar sistemas multiescala como la célula, con núcleo en C++ y frontend en Python.
+- **Virtual Cell (VCell)**: software libre con interfaz gráfica sin necesidad de programar; el usuario introduce reacciones y VCell genera el modelo matemático automáticamente. Permite ejecutar en local o delegar a sus servidores.
+- **Whole-Cell Model de *M. genitalium*** (Karr et al., *Cell*, 2012): primer modelo que integró los procesos biológicos conocidos de un organismo completo (525 genes).
+- **Modelo de *JCVI-syn3A*** (Covert Lab, Stanford, 2022–2023): sucesor sobre la célula mínima sintética (~473 genes), extendido posteriormente a colonias de *E. coli* mediante la librería **Vivarium**, que permite simulaciones paralelizadas en la nube con detalle molecular completo en un entorno espacial compartido.
+
+### 1.2 El hueco identificado
+Revisando la literatura sobre los obstáculos actuales del campo, aparecen dos problemas recurrentes:
+
+- La **construcción fiable de los modelos** y la **inferencia de parámetros** son señaladas como uno de los mayores cuellos de botella del campo; se necesitan métodos más eficientes para simular y depurar sistemas bioquímicos estocásticos grandes.
+- La propia comunidad de whole-cell modeling pide explícitamente mejores **herramientas de control de versiones, validación y trazabilidad** para estos modelos, algo que hoy no existe de forma satisfactoria.
+
+Ninguna de las herramientas existentes (E-Cell, VCell, los modelos de Karr/Covert Lab) ofrece una forma de **inspeccionar el mecanismo interno de la simulación paso a paso**, de manera análoga a como un desarrollador depura un programa. Todas presentan la simulación como una caja relativamente cerrada: se define el modelo, se ejecuta, y se analiza el resultado final en forma de gráficas de trayectorias. Ahí está el hueco que este proyecto quiere ocupar.
+
+---
+
+## 2. Objetivos y alcance
+
+### 2.1 Objetivo general
+Construir un motor de simulación en Python que modele el comportamiento temporal de una célula mínima a partir de una secuencia de ADN proporcionada por el usuario, con base biofísica rigurosa, y que incorpore un **depurador interactivo** como forma primaria de explorar e interpretar la simulación.
+
+### 2.2 Objetivos específicos (MVP)
+1. Motor de simulación estocástica (Gillespie SSA) **escrito desde cero**, diseñado explícitamente para exponer su estado interno paso a paso.
+2. **Depurador interactivo**: ejecución paso a paso, breakpoints sobre condiciones del estado molecular, inspección de propensidades de todas las reacciones candidatas en cada instante.
+3. Módulo de expresión génica: transcripción y traducción realistas a partir de una secuencia ADN real (codones, marco de lectura, código genético estándar).
+4. Módulo metabólico mínimo que provea energía (ATP) y precursores (NTPs, aminoácidos) a los procesos anteriores.
+5. Módulo de replicación de ADN y división celular con segregación estocástica de moléculas.
+6. Registro y visualización de trayectorias temporales, enlazado con el histórico de eventos del depurador.
+7. **Diseño escalable del genoma de entrada**: el número de genes debe ser un parámetro de datos (archivo de secuencia + anotación), no una constante del código, para que el mismo software sirva después con genomas de cientos de genes en estudios más serios.
+
+### 2.3 Explícitamente fuera de alcance (por ahora)
+- Simulación espacial (difusión 3D, geometría celular real).
+- Mutación del ADN y evolución darwiniana / poblacional.
+- Redes metabólicas a escala genómica completa (FBA de miles de reacciones).
+- Interacciones célula-célula o entornos multicelulares.
+- Construcción de modelos asistida por LLM (considerada, aparcada para una fase futura — ver sección 9).
+- Control de versiones tipo "git" para modelos biológicos (considerada, aparcada para una fase futura — ver sección 9).
+
+---
+
+## 3. Decisiones de diseño fundamentales
+
+| Decisión | Elección | Justificación |
+|---|---|---|
+| Espacialidad | **No espacial** (well-mixed) | Reduce drásticamente la complejidad; primera aproximación válida y extensible después. |
+| Naturaleza de la cinética | **Estocástica** (Gillespie SSA) | Los números de copias reales de ARNm y reguladores son bajos; las ODEs deterministas no capturan el ruido biológico, que es parte esencial del fenómeno. |
+| Alcance temporal | **Dinámica de una célula (o linaje)**, sin mutación | El interés es observar el ciclo de vida, no la evolución darwiniana. |
+| **Implementación del motor SSA** | **Propia, desde cero, en Python** | Librerías maduras como GillesPy2 ejecutan la simulación como una caja negra optimizada en C++/Cython, invocada mediante un único método `.run()`. Esto las hace rápidas pero **imposibles de pausar o inspeccionar a mitad de ejecución** sin modificar su código interno. Como el depurador es el diferenciador del proyecto, el bucle SSA debe ser nuestro desde el principio: es donde vive el punto de enganche. |
+| Resto de componentes no críticos para la innovación | **Librerías de terceros maduras** | Reinventar el manejo de secuencias de ADN, formatos de intercambio o graficado no aporta valor innovador — solo introduce riesgo de errores evitables. |
+| Fuente del "ADN" | Secuencia real (BioPython `Seq`), con anotación de genes | Evita inventar reglas arbitrarias; usa el código genético estándar real. |
+| Entrada del genoma | **Archivo externo** (FASTA + anotación GFF3/CSV), nunca codificado en Python | Permite escalar de 8 a cientos de genes sin tocar código, y cargar genomas reales descargados de bases de datos públicas. |
+| Formato de red de reacciones | Compatible con **SBML** donde sea posible (import/export) | Permite interoperar con herramientas existentes y comparar contra modelos publicados. |
+
+---
+
+## 4. El diferenciador: depurador interactivo
+
+### 4.1 Concepto
+Igual que un IDE permite pausar un programa, poner un breakpoint, e inspeccionar variables en memoria, este depurador permite:
+
+- **Ejecución paso a paso**: avanzar reacción a reacción (no solo intervalo de tiempo a intervalo de tiempo), viendo exactamente qué reacción disparó, con qué probabilidad relativa frente a las demás candidatas, y qué especies cambiaron.
+- **Breakpoints condicionales**: pausar automáticamente cuando se cumple una condición sobre el estado molecular — por ejemplo, `ATP < 50`, o `proteína_X == 0 y ARNm_X > 0` (indicio de que la traducción se ha detenido pese a haber ARN mensajero disponible).
+- **Inspección del estado completo**: en cualquier pausa, ver el vector completo de especies y sus cantidades, así como las propensidades de todas las reacciones que *podrían* haber ocurrido en ese instante (no solo la que ocurrió).
+- **Historial navegable**: retroceder sobre el log de eventos ya ocurridos, no solo avanzar.
+
+### 4.2 Por qué es viable con recursos modestos
+El coste computacional de esta funcionalidad es marginal: la información que expone el depurador (qué reacción disparó, con qué propensidad, qué cambió) **ya se calcula internamente** en cada iteración de cualquier implementación correcta del algoritmo de Gillespie. El depurador no añade cálculo nuevo — añade una capa de control (pausar/reanudar) y de registro (loggear el estado en cada paso) sobre un bucle que de todos modos hay que ejecutar. En un genoma de juguete de 5-8 genes, con pocas docenas de reacciones activas, esto es trivial para un equipo con un Ryzen 5 Pro y 8 GB de RAM.
+
+### 4.3 Relación con la interpretabilidad futura
+El log de eventos que genera el depurador (secuencia ordenada de: instante, reacción disparada, estado resultante) es exactamente la materia prima que necesitaría, en una fase futura, un sistema de "narrativa causal" que traduzca la traza estocástica a explicaciones en lenguaje natural (ver sección 9). Diseñar el depurador pensando en esta reutilización evita tener que rehacer el registro de eventos más adelante.
+
+### 4.4 Funcionalidades avanzadas del depurador
+
+Tres capacidades adicionales que profundizan el diferenciador del proyecto:
+
+**a) Visualización en tiempo real del "espacio de propensidades"**
+En cada paso, el motor SSA calcula la propensidad de *todas* las reacciones candidatas, no solo de la que finalmente dispara. Hoy esa información se descarta tras el sorteo. La propuesta es representarla visualmente en cada pausa del depurador — por ejemplo, como un diagrama de barras o de tarta que muestre el "peso" relativo de cada reacción candidata en ese instante, actualizándose a medida que se avanza paso a paso. Esto convierte una abstracción matemática (la distribución de propensidades) en algo que se puede *ver* cambiar en tiempo real, y ayuda a entender visualmente por qué una reacción "gana" a las demás en un instante dado. Coste computacional bajo: los datos ya existen, solo falta representarlos.
+
+**b) Retroceso (undo de reacciones)**
+Permitir deshacer la última reacción disparada — o varias — y volver a un estado anterior exacto del sistema. Es la funcionalidad más compleja de las tres, por una razón de fondo: el algoritmo de Gillespie es un proceso de Markov con generación de números aleatorios; deshacer una reacción no es solo revertir el cambio de cantidades moleculares, sino también restaurar el estado del generador aleatorio y el reloj de simulación al instante exacto anterior, para que un "step" posterior sea reproducible. La forma más robusta de conseguirlo sin reescribir el motor es que el depurador mantenga snapshots periódicos del estado completo (especies + semilla del generador aleatorio + tiempo) en vez de intentar invertir matemáticamente cada reacción, y reconstruya el punto exacto navegando desde el snapshot más cercano. Es una funcionalidad de alto valor diferenciador (ningún whole-cell model existente la ofrece) pero de complejidad no trivial — se aborda después de que el modo paso a paso básico esté sólido y bien probado.
+
+### 4.5 Análisis causal retrospectivo ("modo forense")
+
+El depurador paso a paso (secciones 4.1–4.4) y el análisis causal retrospectivo responden a preguntas complementarias pero opuestas en dirección:
+
+```
+Depurador paso a paso:          ¿Qué va a pasar?     (hacia adelante)
+Análisis causal retrospectivo:  ¿Por qué pasó?        (hacia atrás)
+```
+
+Dado un evento ya ocurrido en el log (por ejemplo, "la célula se quedó sin ATP en el segundo 812"), este modo permite hacer preguntas retrospectivas sobre la cadena causal que llevó a ese estado: qué reacciones consumieron más ATP en la ventana previa, qué gen dejó de expresarse justo antes, y en qué punto la trayectoria empezó a divergir del comportamiento "esperado". A diferencia del modo paso a paso (que se recorre hacia adelante y ejecuta simulación nueva), el análisis retrospectivo parte del final y reconstruye la explicación hacia atrás **sobre el log ya registrado** — no necesita ejecutar nada de nuevo, solo consultar y correlacionar el historial.
+
+---
+
+## 5. Arquitectura del sistema
+
+### Capa 1 — Motor de simulación (propio, genérico y reutilizable)
+- **Gestor de especies**: catálogo de moléculas presentes (ADN, ARNm, proteínas, metabolitos, complejos) con sus números de copias actuales.
+- **Gestor de reacciones**: cada reacción define reactivos, productos y una función de propensión (tasa dependiente del estado).
+- **Bucle SSA propio**: implementación del algoritmo de Gillespie (método directo) escrita en Python, estructurada explícitamente como generador/iterador para poder pausarse en cada paso.
+- **Capa de depuración**: envuelve el bucle SSA anterior, añadiendo modo paso a paso, evaluación de breakpoints, y registro del historial completo de eventos.
+- **Registro de trayectorias**: histórico tiempo × especie × cantidad, derivado del log de eventos, en `pandas.DataFrame`.
+
+### Capa 2 — Módulos biológicos
+Construidos sobre la capa 1, cada uno aporta especies y reacciones al motor:
+
+1. **`GenomeModule`** — Representa el ADN (secuencia + anotación de genes) usando `BioPython`. Genera automáticamente las reacciones de transcripción disponibles a partir de la secuencia real.
+2. **`TranscriptionModule`** — Unión de ARN-polimerasa al promotor → elongación → terminación → liberación de ARNm. Consume NTPs.
+3. **`TranslationModule`** — Unión de ribosoma al ARNm → elongación codón a codón (código genético real vía BioPython) → terminación → liberación de proteína. Consume aminoácidos y GTP/ATP.
+4. **`DegradationModule`** — Degradación estocástica de ARNm y proteínas según tasas de vida media conocidas.
+5. **`MetabolismModule`** — Red mínima de reacciones (glucólisis simplificada) que repone los precursores consumidos por transcripción/traducción. Punto de acoplamiento energético del modelo.
+6. **`RegulationModule`** *(no prevista en el diseño original de esta sección; añadida en la Fase 2)* — Represión transcripcional reversible: un represor ya traducido puede unirse a un gen ya transcrito, formando un complejo reprimido que bloquea su transcripción mientras dura la unión. Se modela como un interruptor de dos estados (gen libre ↔ gen reprimido), reutilizando la reacción de transcripción que ya instala `GenomeModule` sin necesidad de modificarla: al unirse el represor, la copia libre del gen pasa a 0 y la propensidad de transcripción cae a 0 de forma natural.
+
+**Nota de implementación (Fase 1, MVP)**: `GenomeModule` se implementó modelando la transcripción como un **único paso estocástico** (RNAP + gen → RNAP + gen + ARNm), en vez de la cadena unión→elongación→terminación descrita arriba para `TranscriptionModule`. Es el modelo de "dos etapas" estándar en expresión génica estocástica (transcripción de un paso + traducción de un paso), con precedente amplio en la literatura (p. ej. Thattai & van Oudenaarden, 2001). La elongación explícita, con sus propios estados intermedios, queda como refinamiento futuro de `transcription.py` sin romper la interfaz actual: seguiría generándose "una reacción de transcripción por gen" desde `GenomeModule`, solo que seria el paso final de una cadena más larga en vez del único paso.
+6. **`ReplicationModule`** — Dispara replicación del ADN y división celular cuando se cumplen condiciones, con segregación binomial de especies entre células hijas. **Aviso de implementación**: con reparto binomial puro y una única copia de gen antes de dividirse, una de las dos hijas puede quedarse sin ninguna copia funcional de ese gen. Se incluye `replicate_gene_copies()` para duplicar las copias de gen justo antes de dividir (representando que la replicación del ADN ya ha ocurrido), sin modelar el mecanismo de replicación paso a paso — misma simplificación deliberada que en el resto de módulos de la Fase 1.
+
+### Capa 3 — Orquestador `Cell` + interfaz de depuración
+Clase que compone los módulos activos, mantiene el estado global, y expone tanto ejecución normal como depuración:
+
+```python
+cell = Cell()
+cell.load_genome("mi_secuencia.fasta")
+
+# Ejecución normal
+cell.run(duration=3600)
+
+# Ejecución depurada
+debugger = cell.debug()
+debugger.set_breakpoint(lambda state: state["ATP"] < 50)
+debugger.step()                 # avanza una reacción
+debugger.step(n=10)             # avanza 10 reacciones
+debugger.run_until_breakpoint()
+print(debugger.current_event)   # última reacción disparada y su contexto
+print(debugger.pending_propensities())  # qué otras reacciones podían haber ocurrido
+```
+
+### 5.4 Convención de organización de archivos
+
+Para evitar archivos monolíticos difíciles de mantener, el código se organiza en **un archivo por responsabilidad**, siguiendo directamente las capas y módulos ya definidos en esta sección — no hay que inventar una estructura nueva, solo trasladar a directorios lo que el diseño ya distingue:
+
+```
+celula-virtual/
+├── engine/              # Capa 1 — motor genérico
+│   ├── species.py       # Gestor de especies
+│   ├── reactions.py     # Gestor de reacciones
+│   ├── ssa.py            # Bucle SSA propio (generador/iterador)
+│   ├── debugger.py       # Paso a paso, breakpoints, snapshots/undo
+│   ├── forensics.py      # Análisis causal retrospectivo (sección 4.5)
+│   └── trajectory.py     # Registro de trayectorias (pandas)
+├── biology/             # Capa 2 — módulos biológicos
+│   ├── genome.py          # GenomeModule
+│   ├── transcription.py   # TranscriptionModule
+│   ├── translation.py     # TranslationModule
+│   ├── degradation.py     # DegradationModule
+│   ├── metabolism.py      # MetabolismModule
+│   ├── replication.py     # ReplicationModule
+│   └── regulation.py      # RegulationModule (no prevista originalmente)
+├── data_io/             # Carga y exportación de datos
+│   ├── genome_loader.py   # Lectura de FASTA + anotación (sección 6.2)
+│   └── sbml_io.py         # Import/export SBML (sección 7)
+├── cell.py              # Capa 3 — orquestador `Cell`
+├── tests/               # Validación (sección 11)
+├── docs/
+│   ├── whitepaper_celula_virtual.md
+│   └── FILES.md          # Tabla de control de archivos (ver abajo)
+├── examples/
+│   └── genomas/           # Genomas de juguete (sección 6.1) y anotaciones
+├── tools/                # Utilidades de desarrollo, no parte de la librería (no previsto originalmente)
+│   └── generate_synthetic_genome.py   # Genomas sintéticos a escala, para la Fase 6
+└── gui/                  # Interfaz gráfica de escritorio (sección 14, no prevista originalmente)
+    ├── app_state.py        # Lógica de la GUI, independiente de Qt (testeable)
+    ├── breakpoint_builder.py  # Breakpoints sin eval()
+    ├── theme.py               # Tema oscuro
+    ├── simulation_worker.py   # Ejecución en QThread
+    ├── genome_setup_panel.py  # Pestaña Genoma
+    ├── execution_panel.py     # Pestaña Ejecución
+    ├── debugger_panel.py      # Pestaña Depurador
+    ├── forensics_panel.py     # Pestaña Forense
+    ├── main_window.py         # Ventana principal
+    └── app.py                 # Punto de entrada (`python -m gui.app`)
+```
+
+**Regla práctica**: si un archivo empieza a mezclar más de una responsabilidad de las ya nombradas en la arquitectura (por ejemplo, `ssa.py` empieza a incluir lógica de breakpoints), se separa en un archivo nuevo en cuanto se detecta, no se pospone.
+
+**Nota sobre el nombre `data_io/`**: se descartó el nombre `io/` (usado en un borrador anterior de este documento) porque colisiona con el módulo `io` de la librería estándar de Python. `io` se carga durante el arranque del propio intérprete y queda cacheado como módulo (no paquete) antes de que se ejecute cualquier código propio, así que `import io.genome_loader` falla directamente — Python nunca llega a mirar el directorio local. Se comprobó empíricamente antes de renombrar.
+
+**Tabla de control**: se mantiene un archivo `docs/FILES.md` con una tabla `Archivo | Funcionalidad principal | Capa | Estado`, actualizada cada vez que se añade o modifica un archivo relevante. Es un documento vivo (a diferencia de este white paper, que registra decisiones de diseño), y sirve como mapa rápido del repositorio sin tener que abrir cada archivo.
+
+---
+
+## 6. Genoma mínimo del MVP — y diseño para escalar
+
+### 6.1 Punto de partida
+Genoma de juguete de **5-8 genes esenciales**, inspirado en categorías funcionales de *JCVI-syn3A*:
+
+- 1–2 genes de proteínas ribosomales (maquinaria de traducción).
+- 1 gen metabólico (enzima glicolítica simplificada).
+- 1 gen regulador (represor o activador simple), para observar dinámica no trivial — y para tener un caso de uso claro del depurador (ej. "¿por qué se detuvo la transcripción de este gen?").
+- (Opcional) tratar la ARN-polimerasa como maquinaria preexistente, no codificada por gen, para simplificar la Fase 1.
+
+### 6.2 Requisito de diseño: escalar sin reescribir
+Aunque el MVP arranca con un puñado de genes, el objetivo es que el software sirva más adelante para **estudios serios con genomas reales de cientos de genes** (por ejemplo, aproximarse al genoma completo de *JCVI-syn3A*, ~473 genes), sin que eso requiera rediseñar el motor. Esto se consigue con tres decisiones concretas desde el principio:
+
+- **El genoma nunca se codifica a mano en Python.** Se carga siempre desde un archivo externo (FASTA para la secuencia + una anotación en formato tabular — GFF3 o un CSV simple — para posición, promotor y marco de lectura de cada gen). Añadir genes es editar el archivo de entrada, no tocar código. Esto también es lo que permite, en el futuro, importar genomas anotados reales descargados de bases de datos públicas (NCBI, EBI) sin ningún trabajo adicional.
+- **Las reacciones se generan programáticamente a partir de la anotación, no se declaran una a una.** El `GenomeModule` recorre la lista de genes anotados y genera automáticamente las reacciones de transcripción/traducción correspondientes a cada uno, siguiendo una plantilla común. Pasar de 8 a 400 genes no implica escribir 50 veces más código — implica que el mismo bucle de generación se ejecuta más veces.
+- **El motor SSA propio (sección 4) no asume un número fijo de especies o reacciones.** Las estructuras de datos (gestor de especies, gestor de reacciones) están indexadas dinámicamente, así que el tamaño del sistema es un parámetro de entrada, no una constante del código.
+
+### 6.3 El límite real: rendimiento, no arquitectura
+Como se apuntó en la sección 12, el bucle SSA propio en Python puro es más lento que una implementación optimizada en C++ como la de GillesPy2. Con 5-8 genes esto es irrelevante; con cientos de genes y miles de reacciones, el coste por paso de simulación puede volverse notable en un equipo doméstico. Este es un problema conocido y con soluciones estándar, a aplicar solo si se llega a ese punto, sin que afecten al diseño ni al código de los módulos biológicos:
+
+- **Perfilar primero, optimizar después**: identificar qué parte del bucle (cálculo de propensidades, muestreo aleatorio) es el cuello de botella real antes de optimizar nada.
+- **Vectorización con `numpy`** del cálculo de propensidades cuando el número de reacciones sea grande, en vez de iterarlas una a una en Python puro.
+- **Tau-leaping** en vez de SSA exacto para las especies muy abundantes, reduciendo el número de pasos necesarios sin perder la naturaleza estocástica del modelo (es el mismo principio que usa GillesPy2 internamente).
+- **Extensión selectiva en Cython** del núcleo del bucle SSA (no de la capa de depuración), si tras perfilar se confirma que ahí está el cuello de botella — manteniendo el resto del código en Python puro.
+- **Reutilizar el formato SBML** (ya contemplado en la sección 7) como puente: si en algún estudio serio conviene delegar la simulación en bruto a un solver externo más rápido (como el de GillesPy2) para un genoma grande, el modelo puede exportarse a SBML sin perder compatibilidad — reservando el motor propio y su depurador para el trabajo exploratorio y de inspección detallada.
+
+**Resultados reales de la Fase 6** (`tests/test_scalability.py`, `tools/generate_synthetic_genome.py`): en vez de descargar un genoma público real (sin acceso a red en el entorno donde se desarrolló este código), se generó un genoma sintético a escala configurable con el mismo formato de entrada (FASTA + anotación CSV) que exige `data_io/genome_loader.py` — así que sustituir esto por un genoma real descargado de NCBI/EBI es, literalmente, cambiar la ruta de los dos archivos de entrada, sin tocar ningún código. El perfilado a 10/50/100 genes dio 0.026 / 0.184 / 0.250 ms por paso respectivamente — escala con el número de reacciones activas, tal como se predijo arriba, y sigue siendo perfectamente manejable en un equipo doméstico incluso a 100 genes (400 reacciones).
+
+---
+
+## 7. Formatos, estándares y librerías
+
+| Necesidad | Herramienta | Propia o de terceros |
+|---|---|---|
+| Bucle de simulación SSA + depurador | Implementación propia | **Propia** (es el diferenciador) |
+| Secuencias ADN/ARN, código genético, traducción | `BioPython` | Terceros |
+| Redes de reacciones interoperables | `SBML` — implementado sobre `xml.etree.ElementTree` (librería estándar), no `libsbml` (ver nota) | Propia sobre estándar SBML |
+| Cálculo numérico general | `numpy` | Terceros |
+| Registro y análisis de trayectorias | `pandas` | Terceros |
+| Visualización | `matplotlib`, `plotly` | Terceros |
+| Interfaz de depuración (si se hace interactiva en terminal o notebook) | `rich` / `ipywidgets` (a evaluar) | Terceros |
+| Validación automatizada (sección 11) y CI (sección 10) | `pytest` | Terceros |
+| Interfaz gráfica de escritorio (sección 14) | `PySide6` | Terceros |
+
+**Nota sobre SBML**: `data_io/sbml_io.py` se implementó sobre `xml.etree.ElementTree` en vez de `libsbml` porque el entorno donde se desarrolló este código no tenía acceso a red para instalar y validar `libsbml`. Cubre el caso de uso principal (exportar nuestros modelos, reimportarlos con fidelidad exacta — round-trip verificado) sin esa dependencia extra. Sigue siendo SBML Level 3 Version 1 válido y abrible en herramientas externas; si en el futuro hace falta validación estricta contra el esquema oficial o importar SBML arbitrario de terceros, `libsbml` (ya en `requirements.txt`) sigue siendo la opción recomendada para esa ampliación.
+| Metabolismo a escala genómica (futuro) | `COBRApy` | Terceros |
+
+### 7.1 Lista de instalación
+
+Librerías agrupadas por cuándo hacen falta, para no instalar de golpe cosas que no se usarán hasta fases posteriores. El listado exacto y versionado vive en `requirements.txt` (ver `docs/FILES.md`), esta tabla es la referencia legible.
+
+**Imprescindibles desde la Fase 0** (motor SSA propio, carga de genoma, tests):
+```
+numpy
+pandas
+biopython
+python-libsbml
+pytest
+```
+
+**Necesarias a partir de la Fase 1** (expresión génica — ya cubiertas arriba, sin añadidos nuevas).
+
+**Necesarias a partir de la Fase 5** (visualización e interfaz de depuración pulida):
+```
+matplotlib
+plotly
+rich
+```
+
+**Opcional, a evaluar** (alternativa a `rich` si se prioriza notebook sobre terminal):
+```
+ipywidgets
+```
+
+**Futura, no en el MVP** (metabolismo a escala genómica, sección 9):
+```
+cobra
+```
+
+**Instalación del núcleo del MVP:**
+```bash
+pip install numpy pandas biopython python-libsbml pytest
+```
+
+Cada vez que una fase del roadmap (sección 8) introduzca una necesidad nueva no cubierta aquí, esta sección y `requirements.txt` se actualizan en el mismo commit que el código que la usa — igual que se actualiza `docs/FILES.md`.
+
+### 7.2 Esquema de identificación de especies
+
+Para que el modelo sea comparable e interoperable con trabajos publicados, cada especie molecular (gen, ARNm, proteína, metabolito) necesita un identificador único y consistente desde el principio — no como algo a resolver después, porque cambiarlo más tarde obligaría a tocar todos los módulos.
+
+- **ID interno estable**: cada especie recibe un identificador corto y único dentro del modelo (ej. `ATP`, `mRNA_geneA`, `Prot_geneA`), usado internamente por el motor SSA y por todos los módulos, y derivado directamente del gen de origen para que sea trazable a simple vista.
+- **Alcance en el MVP**: en esta fase el esquema cubre únicamente la identificación interna. La correspondencia con ontologías externas (BioCyc, KEGG u otras) queda fuera de alcance por ahora — se revisará si el proyecto llega a un punto en que comparar directamente con modelos publicados se vuelva necesario.
+
+Este esquema es, además, un prerrequisito silencioso para poder exportar e importar modelos en SBML de forma correcta (sección 7), ya que SBML también exige identificadores de especie únicos.
+
+---
+
+## 8. Roadmap por fases
+
+| Fase | Objetivo | Criterio de éxito |
+|---|---|---|
+| **0** | Motor SSA propio (como generador/iterador) + clase `Cell` esqueleto | Simular una reacción de prueba (A + B → C) reacción a reacción, verificando que la distribución estocástica converge al comportamiento esperado |
+| **0.5** | Capa de depuración sobre el motor de la Fase 0 | Poder pausar, hacer step, poner un breakpoint simple, e inspeccionar el estado — sobre el sistema de prueba |
+| **1** | Transcripción/traducción de 1 gen | Observar aparición y degradación de ARNm y proteína, y poder depurar por qué ocurrió cada evento |
+| **2** | Varios genes + regulación simple | ✅ Cumplido — `biology/regulation.py`. Dinámica de un represor afectando otro gen: comparación directa con/sin represión activa muestra una reducción drástica del ARNm del gen diana (ej. 1968 → 1 en una simulación de prueba con represión fuerte) |
+| **3** | Metabolismo mínimo acoplado (ATP) | ✅ Cumplido — `biology/metabolism.py` + acoplamiento opcional en `genome.py`/`translation.py`. Comparación con/sin reposición de ATP: 524 vs 5 ARNm en una simulación de prueba. Breakpoint de ejemplo (`ATP < umbral`) reproducido con el depurador de la Fase 0.5 |
+| **4** | Replicación de ADN + división celular | ✅ Cumplido — `biology/replication.py`. Ciclo celular completo verificado: transcripción + traducción hasta umbral de masa proteica → división con reparto binomial → ambas hijas continúan la simulación de forma independiente |
+| **5** | Interfaz de depuración pulida + visualización básica | Depurador usable cómodamente (terminal enriquecida o notebook), gráficas de trayectorias enlazadas con el log de eventos |
+| **5.1** | Visualización en tiempo real del espacio de propensidades | ✅ Cumplido — `engine/propensity_view.py`. Render con `rich` si está disponible; fallback a texto plano verificado en un entorno real sin `rich` instalado |
+| **5.2** | Análisis causal retrospectivo (sección 4.5) | ✅ Cumplido — `engine/forensics.py`. Verificado sobre una simulación real: identifica correctamente `transcribe_target` como productor y `degrade_mRNA_target` como consumidor de `mRNA_target` |
+| **5.3** | Retroceso (undo de reacciones) | ✅ Cumplido — `engine/snapshot.py` + `Debugger.undo_to()`. Verificado que retroceder y reproducir genera exactamente la misma secuencia de eventos ya ocurrida. La sincronización `Cell`↔`undo` (`cell.debug().undo_to()` recortando también `cell.get_events()`) quedó cerrada en una iteración posterior — ver `cell.py` en la tabla de control, incluye un bug real detectado y corregido durante esa integración |
+| **6** | Prueba de escalabilidad | ✅ Cumplido (con genoma sintético, no descargado — ver nota) — `tools/generate_synthetic_genome.py`. El mismo `GenomeModule`/`TranslationModule`/`DegradationModule` funciona a 100 genes sin ningún cambio de código. Perfilado real: 10 genes → 0.026 ms/paso; 50 genes → 0.184 ms/paso; 100 genes → 0.250 ms/paso — escala con el número de reacciones, coherente con el coste O(reacciones) esperado del método directo de Gillespie |
+
+---
+
+## 9. Extensiones futuras consideradas (no en el MVP)
+
+Durante el diseño se evaluaron otros tres ángulos de innovación, aparcados deliberadamente para no dispersar el esfuerzo inicial:
+
+- **Narrativa causal en lenguaje natural**: traducir el log de eventos del depurador a explicaciones textuales del tipo "el represor X bloqueó la transcripción de Y, lo que redujo el ATP disponible en un Z%". Es una extensión natural de la Fase 0.5, ya que reutiliza directamente el log de eventos del depurador. Riesgo bajo si se implementa primero como reglas/plantillas, antes de considerar un LLM.
+- **Construcción de modelos asistida por LLM**: uso de un LLM para proponer automáticamente redes de reacciones y parámetros cinéticos a partir de anotaciones génicas, contrastando contra bases de datos como EcoCyc/BioCyc. Aparcado por el riesgo de que el LLM "alucine" parámetros biológicos sin trazabilidad — abordar solo con validación estricta de fuentes.
+- **Control de versiones tipo "git" para modelos biológicos**: tratar el genoma y la red de reacciones como código versionable (commits, ramas, diffs), respondiendo a una necesidad explícitamente señalada por la comunidad de whole-cell modeling. Aparcado hasta tener un modelo estable que merezca la pena versionar.
+
+---
+
+## 10. Estrategia de código abierto y comunidad
+
+El proyecto se desarrollará públicamente en **GitHub** desde la Fase 0, no como un paso posterior de "publicación" al final. Motivos:
+
+- **Trazabilidad desde el origen**: cada decisión de diseño de este white paper puede enlazarse a commits e issues concretos, lo cual es coherente con la propia filosofía del depurador (todo debe ser inspeccionable y reproducible).
+- **Validación externa**: al tratarse de un modelo biofísico riguroso, exponer el código permite que otros revisen las tasas cinéticas usadas, los supuestos del modelo, y detecten errores — algo especialmente valioso dado que no formamos parte de un laboratorio con revisión por pares interna.
+- **Responde a una necesidad ya señalada por la comunidad**: como se documentó en la sección 1.2, la comunidad de whole-cell modeling ha pedido explícitamente mejores herramientas de trazabilidad y colaboración abierta para este tipo de modelos.
+- **Reutilización futura**: si más adelante se retoma la idea aparcada de "control de versiones tipo git para modelos biológicos" (sección 9), tener el proyecto ya versionado en GitHub desde el principio es una base natural sobre la que construir esa funcionalidad.
+
+**Elementos mínimos del repositorio:**
+- Licencia abierta (a decidir — MIT o GPLv3 son las más comunes en este ecosistema; GPLv3 es la usada por E-Cell4, lo cual facilitaría eventuales colaboraciones cruzadas).
+- Este white paper como documento de diseño versionado (`docs/` o `DESIGN.md`), actualizado a medida que el proyecto evolucione.
+- Issues abiertos para cada fase del roadmap, de forma que el progreso sea visible públicamente.
+- README con instrucciones de instalación y un ejemplo mínimo reproducible (el sistema de prueba A + B → C de la Fase 0), para que cualquiera pueda validar el motor SSA de forma inmediata.
+- Tests automatizados desde el principio (validación estadística contra soluciones analíticas, mencionada en la sección 11), configurados como integración continua (GitHub Actions) para que cada cambio se valide automáticamente.
+
+---
+
+## 11. Validación y criterios de éxito
+
+- **Motor SSA propio**: comparar contra soluciones analíticas de sistemas simples (nacimiento-muerte de una especie) para verificar que la implementación de Gillespie es correcta antes de añadir la capa de depuración.
+- **Transcripción/traducción**: usar tasas tomadas de literatura real (valores publicados para *E. coli* o *M. genitalium*), no inventadas.
+- **Acoplamiento energético**: verificar que un déficit de ATP ralentiza efectivamente la expresión génica.
+- **Ciclo celular**: verificar que el reparto de moléculas entre células hijas sigue una distribución binomial.
+- **Depurador**: verificar que el modo paso a paso produce exactamente la misma distribución estadística de resultados que el modo de ejecución normal (el depurador no debe alterar la física del sistema, solo la forma de observarlo).
+
+---
+
+## 12. Limitaciones conocidas
+
+- **No espacial**: se ignoran gradientes de concentración, difusión y geometría celular real.
+- **Sin mutación**: el ADN es estático durante toda la simulación (decisión deliberada, no limitación técnica).
+- **Metabolismo simplificado**: una vía mínima, no una red genómica completa.
+- **Escala del genoma**: 5–8 genes iniciales, lejos de los 473 de una célula mínima real; escalar es principalmente un problema de rendimiento del bucle SSA propio, a resolver con optimización (ej. Cython) si se llega a ese punto.
+- **Motor propio vs. librerías optimizadas**: al escribir el bucle SSA nosotros mismos en Python puro, será más lento que soluciones en C++ como GillesPy2 para modelos grandes. Aceptable para el MVP (pocas reacciones); revisar si se escala mucho el genoma.
+
+---
+
+## 13. Referencias clave
+
+- Karr, J.R. et al. (2012). *A Whole-Cell Computational Model Predicts Phenotype from Genotype.* Cell, 150(2), 389–401.
+- Thornburg, Z.R. et al. (2022). *Fundamental behaviors emerge from simulations of a living minimal cell.* Cell, 185(2), 345–360.
+- Gillespie, D.T. (1977). *Exact stochastic simulation of coupled chemical reactions.* The Journal of Physical Chemistry, 81(25), 2340–2361.
+- Hucka, M. et al. (2003). *The systems biology markup language (SBML).* Bioinformatics, 19(4), 524–531.
+- Stumpf, M.P.H. (2021). *Statistical and computational challenges for whole cell modelling.* Current Opinion in Systems Biology, 26, 58–63.
+- Karr, J.R. et al. (2017). *A blueprint for human whole-cell modeling.* (Propuesta de estándares y control de versiones para la comunidad).
+- Abel, J.H. et al. / GillesPy2 documentation (StochSS project) — referencia de por qué las librerías SSA existentes no exponen ejecución paso a paso de forma nativa.
+
+---
+
+## 14. Interfaz gráfica de escritorio (`gui/`)
+
+No prevista en la arquitectura original de este documento — añadida a petición explícita, con el requisito de no modificar el código ya construido salvo que fuera imprescindible (no lo fue: la GUI se apoya enteramente en la API pública ya existente de `Cell`, `Debugger`, los módulos biológicos, y `data_io/sbml_io.py`).
+
+### 14.1 Decisión de arquitectura: lógica separada de Qt
+
+Todo el "cerebro" de la aplicación vive en `gui/app_state.py` (clase `AppState`) y `gui/breakpoint_builder.py`, **sin ninguna dependencia de Qt**. Los archivos que sí dependen de Qt (`theme.py`, `simulation_worker.py`, `*_panel.py`, `main_window.py`, `app.py`) son envoltorios finos que solo conectan widgets a métodos de `AppState`, sin lógica de negocio propia. Esto reproduce, para la GUI, el mismo patrón ya usado en `engine/propensity_view.py` (sección 5.1): separar los datos de su representación visual, para poder testear lo importante sin depender del entorno gráfico.
+
+### 14.2 Estructura
+
+Una única ventana (`MainWindow`) con pestañas, en vez de varias ventanas separadas:
+
+- **Genoma** (`genome_setup_panel.py`): carga de FASTA + anotación, configuración de maquinaria (RNAP, ribosomas), vidas medias de degradación, y metabolismo opcional.
+- **Ejecución** (`execution_panel.py`): correr N pasos o N segundos (en un `QThread` aparte, para no congelar la ventana — ver 14.3), tabla de especies en vivo, gráfica de trayectoria (`matplotlib` embebido vía `FigureCanvasQTAgg`), y división celular.
+- **Depurador** (`debugger_panel.py`): paso a paso, breakpoints (construidos sin `eval()`, ver 14.4), visualización en vivo del espacio de propensidades, y retroceso (undo).
+- **Forense** (`forensics_panel.py`): análisis causal retrospectivo sobre una especie y una ventana temporal.
+- **Menú Archivo**: exportar/importar SBML.
+
+### 14.3 Ejecución en segundo plano
+
+Correr miles de pasos (o `max_time` largos) bloquearía la interfaz entera si se ejecutara en el mismo hilo donde Qt procesa los eventos de la ventana. `gui/simulation_worker.py` delega `run_steps()`/`run_time()` de `AppState` a un `QThread` aparte, emitiendo señales (`finished_run`, `error`) que la interfaz escucha de forma seguro entre hilos.
+
+### 14.4 Breakpoints sin `eval()`
+
+En vez de dejar que el usuario escriba una expresión Python arbitraria para el breakpoint (`s['ATP'] < 10`) y evaluarla con `eval()`, `gui/breakpoint_builder.py` construye la condición a partir de tres valores simples elegidos en la interfaz (especie, operador de comparación, umbral), sin ejecutar ningún texto. Aunque el código se ejecuta localmente en la máquina del propio usuario — donde `eval()` no sería un riesgo de seguridad en sentido estricto — evitarlo es una precaución barata que no cuesta nada y quita cualquier ambigüedad futura si este mecanismo se reutiliza en otro contexto.
+
+### 14.5 Limitación: metabolismo con enzima + acoplamiento a ATP no son combinables a la vez
+
+`GenomeSetupOptions.metabolism_mode` obliga a elegir entre metabolismo "de fondo" con acoplamiento a ATP en transcripción/traducción, o metabolismo catalizado por una enzima real (proteína de un gen ya traducido) — pero no ambos simultáneamente. No es una limitación de la GUI: es una restricción real del orden de instalación de los módulos ya existentes (`biology/genome.py`/`biology/translation.py` exigen que el ATP exista *antes* de instalarse si se quiere acoplamiento energético; `biology/metabolism.py` con enzima exige que la proteína catalizadora ya exista, lo cual solo ocurre *después* de instalar la traducción). Combinar ambas a la vez requeriría cambiar el orden de instalación de los módulos biológicos ya construidos y validados — se documenta como limitación conocida en vez de forzar un cambio en código ya probado, tal como se pidió.
+
+### 14.6 Sin soporte de multi-célula
+
+Al dividir una célula, se generan dos hijas (`biology/replication.py`), pero la GUI solo puede continuar la simulación con **una** de ellas (`AppState.adopt_daughter()`) — la otra se descarta de la vista, aunque el objeto `Cell` en sí sigue siendo válido si se quisiera usar por separado. Seguir el árbol genealógico completo de una población dividiéndose repetidamente queda fuera del alcance de esta interfaz (sería una extensión considerable: gestión de múltiples `Cell` simultáneas, cada una con su propio hilo de ejecución).
+
+### 14.7 Validación limitada por el entorno de desarrollo
+
+El entorno donde se escribió este código no tiene `PySide6` instalado ni servidor de pantalla, así que los archivos de Qt solo se pudieron validar por sintaxis (`python -m py_compile`) e inspección manual de la API — no se pudieron ejecutar ni ver renderizados. `gui/app_state.py` y `gui/breakpoint_builder.py`, al no depender de Qt, sí están completamente testeados con `assert` real (15 casos). Es esperable que aparezcan ajustes menores al ejecutar por primera vez en una máquina con `PySide6` real.
+
+---
+
+
+
+## Próximo paso
+
+Con este documento como referencia, el siguiente paso es implementar la **Fase 0**: el motor SSA propio, escrito como generador/iterador en Python, validado contra un sistema químico de prueba simple — sentando la base sobre la que se construirá la capa de depuración en la Fase 0.5.
