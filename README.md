@@ -27,7 +27,7 @@ cd celula-virtual
 pip install -r requirements.txt
 ```
 
-Requiere Python 3.10+. Ver [`requirements.txt`](requirements.txt) para el detalle de qué librería hace falta en cada fase del proyecto.
+Requiere Python 3.10+. Ver [`docs/requirements.txt`](docs/requirements.txt) para el detalle de qué librería hace falta en cada fase del proyecto.
 
 ## Uso rápido
 
@@ -104,12 +104,12 @@ celula-virtual/
 └── FILES.md       # Mapa vivo de qué archivo hace qué y su estado
 ```
 
-Para saber exactamente qué hace cada archivo y en qué estado está (implementado, en progreso, pendiente), consulta [`FILES.md`](FILES.md) — es un documento vivo que se actualiza en cada cambio relevante.
+Para saber exactamente qué hace cada archivo y en qué estado está (implementado, en progreso, pendiente), consulta [`docs/FILES.md`](docs/FILES.md) — es un documento vivo que se actualiza en cada cambio relevante.
 
 ## Documentación
 
 - [`docs/whitepaper_celula_virtual.md`](docs/whitepaper_celula_virtual.md) — diseño completo: motivación, arquitectura, decisiones y por qué se tomaron, roadmap por fases, limitaciones conocidas.
-- [`FILES.md`](FILES.md) — tabla de control de archivos.
+- [`docs/FILES.md`](docs/FILES.md) — tabla de control de archivos.
 
 ## Estado del proyecto
 
