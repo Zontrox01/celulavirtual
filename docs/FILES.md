@@ -51,14 +51,14 @@ Documento vivo. Se actualiza cada vez que se crea o modifica un archivo relevant
 | `tools/generate_synthetic_genome.py` | Genera genomas sintéticos a escala configurable (FASTA + anotación), para la prueba de escalabilidad de la Fase 6; directorio `tools/` no previsto en la arquitectura original | Herramientas | 6 | ✅ |
 | `gui/app_state.py` | Estado de la aplicación GUI, independiente de Qt — toda la lógica de negocio (cargar genoma, ejecutar, depurar, dividir, SBML), testeable con `assert` puro | GUI | — (no prevista) | ✅ |
 | `gui/breakpoint_builder.py` | Construcción segura de condiciones de breakpoint desde valores de widgets, sin `eval()` | GUI | — (no prevista) | ✅ |
-| `gui/theme.py` | Tema oscuro: paleta de colores + hoja de estilos | GUI | — (no prevista) | 🟡 (sintaxis validada; no se puede ejecutar en este entorno, sin `PySide6` ni pantalla) |
-| `gui/simulation_worker.py` | Hilo (`QThread`) para ejecutar la simulación sin congelar la ventana | GUI | — (no prevista) | 🟡 (ídem) |
-| `gui/genome_setup_panel.py` | Pestaña "Genoma": carga de archivos, configuración de maquinaria/degradación/metabolismo, instalación | GUI | — (no prevista) | 🟡 (ídem) |
-| `gui/execution_panel.py` | Pestaña "Ejecución": correr, tabla de especies en vivo, gráfica de trayectoria (matplotlib embebido), división celular | GUI | — (no prevista) | 🟡 (ídem) |
-| `gui/debugger_panel.py` | Pestaña "Depurador": paso a paso, breakpoints, espacio de propensidades en vivo, retroceso | GUI | — (no prevista) | 🟡 (ídem) |
-| `gui/forensics_panel.py` | Pestaña "Forense": análisis causal retrospectivo sobre una especie y ventana temporal | GUI | — (no prevista) | 🟡 (ídem) |
-| `gui/main_window.py` | Ventana principal: une todas las pestañas + menú Archivo (exportar/importar SBML) | GUI | — (no prevista) | 🟡 (ídem) |
-| `gui/app.py` | Punto de entrada de la aplicación (`python -m gui.app`) | GUI | — (no prevista) | 🟡 (ídem) |
+| `gui/theme.py` | Tema oscuro: paleta de colores + hoja de estilos | GUI | — (no prevista) | ✅ (sintaxis validada) |
+| `gui/simulation_worker.py` | Hilo (`QThread`) para ejecutar la simulación sin congelar la ventana | GUI | — (no prevista) | ✅ (sintaxis validada) |
+| `gui/genome_setup_panel.py` | Pestaña "Genoma": carga de archivos, configuración de maquinaria/degradación/metabolismo, instalación | GUI | — (no prevista) | ✅ (sintaxis validada) |
+| `gui/execution_panel.py` | Pestaña "Ejecución": correr, tabla de especies en vivo, gráfica de trayectoria (matplotlib embebido), división celular | GUI | — (no prevista) | ✅ (sintaxis validada) |
+| `gui/debugger_panel.py` | Pestaña "Depurador": paso a paso, breakpoints, espacio de propensidades en vivo, retroceso | GUI | — (no prevista) | ✅ (sintaxis validada) |
+| `gui/forensics_panel.py` | Pestaña "Forense": análisis causal retrospectivo sobre una especie y ventana temporal | GUI | — (no prevista) | ✅ (sintaxis validada) |
+| `gui/main_window.py` | Ventana principal: une todas las pestañas + menú Archivo (exportar/importar SBML) | GUI | — (no prevista) | ✅ (sintaxis validada) |
+| `gui/app.py` | Punto de entrada de la aplicación (`python -m gui.app`) | GUI | — (no prevista) | ✅ (sintaxis validada) |
 | `tests/test_scalability.py` | Fase 6: mismo código funcionando a 100 genes sin modificar, y perfilado real de rendimiento (10/50/100 genes) (6 casos) | Tests | 6 | ✅ |
 | `tests/test_sbml_io.py` | Validación de `data_io/sbml_io.py` — round-trip exacto (exportar → reimportar → mismo comportamiento), archivo, errores (12 casos) | Tests | — | ✅ |
 | `tests/test_app_state.py` | Validación de `gui/app_state.py` — toda la lógica de la GUI sin Qt: metabolismo, regulación, división, SBML, depurador, forense (15 casos) | Tests | — (no prevista) | ✅ |
