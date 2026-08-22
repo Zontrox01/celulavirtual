@@ -1,11 +1,443 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Celula Virtual</title>
+  <title>Célula Virtual – Simulación Biofísica de Célula Mínima</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Simulación biofísica de una célula mínima con motor estocástico propio y depuración interactiva.">
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0b1520;
+      color: #e5edf5;
+      line-height: 1.6;
+    }
+    header {
+      background: linear-gradient(135deg, #1f4b6e, #1b7c6b);
+      padding: 3rem 10%;
+      text-align: left;
+      color: #fdfdfd;
+    }
+    header h1 {
+      margin: 0 0 0.5rem 0;
+      font-size: 2.4rem;
+    }
+    header h2 {
+      margin: 0;
+      font-weight: 400;
+      font-size: 1.2rem;
+      opacity: 0.9;
+    }
+    header p {
+      margin-top: 1.5rem;
+      max-width: 700px;
+      font-size: 1rem;
+    }
+    .hero-image {
+      margin-top: 2rem;
+      display: flex;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+    }
+    .hero-card {
+      flex: 1 1 260px;
+      background: rgba(5, 12, 20, 0.35);
+      border-radius: 12px;
+      padding: 1rem;
+      border: 1px solid rgba(200, 230, 255, 0.12);
+    }
+    .hero-card h3 {
+      margin-top: 0;
+      font-size: 1rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #b9e6ff;
+    }
+    .hero-card p {
+      font-size: 0.95rem;
+      opacity: 0.9;
+    }
+    main {
+      padding: 2.5rem 10% 3rem 10%;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+    section {
+      margin-bottom: 2.5rem;
+      background: rgba(8, 18, 30, 0.9);
+      border-radius: 12px;
+      padding: 1.8rem 1.8rem 1.6rem 1.8rem;
+      border: 1px solid rgba(180, 210, 240, 0.12);
+    }
+    section h2 {
+      margin-top: 0;
+      font-size: 1.4rem;
+      border-bottom: 1px solid rgba(120, 160, 200, 0.35);
+      padding-bottom: 0.4rem;
+      margin-bottom: 1rem;
+    }
+    section h3 {
+      margin-top: 1.4rem;
+      font-size: 1.1rem;
+    }
+    p {
+      margin: 0.4rem 0 0.8rem 0;
+    }
+    .columns {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1.5rem;
+    }
+    .col {
+      flex: 1 1 260px;
+    }
+    .code-block {
+      background: #050b12;
+      border-radius: 8px;
+      padding: 0.9rem 1rem;
+      font-family: "SF Mono", Menlo, Consolas, monospace;
+      font-size: 0.85rem;
+      overflow-x: auto;
+      border: 1px solid rgba(120, 160, 200, 0.35);
+    }
+    .tagline {
+      font-size: 0.95rem;
+      color: #c7d9ec;
+    }
+    .badge-row {
+      margin-top: 0.8rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+    }
+    .badge {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding: 0.25rem 0.6rem;
+      border-radius: 999px;
+      border: 1px solid rgba(200, 230, 255, 0.25);
+      color: #cfe7ff;
+      background: rgba(5, 15, 25, 0.7);
+    }
+    ul {
+      margin: 0.4rem 0 0.8rem 1.2rem;
+      padding: 0;
+    }
+    li {
+      margin-bottom: 0.3rem;
+    }
+    .project-structure {
+      font-family: "SF Mono", Menlo, Consolas, monospace;
+      font-size: 0.85rem;
+      background: #050b12;
+      border-radius: 8px;
+      padding: 0.9rem 1rem;
+      border: 1px solid rgba(120, 160, 200, 0.35);
+      overflow-x: auto;
+      white-space: pre;
+    }
+    footer {
+      padding: 1.5rem 10%;
+      font-size: 0.8rem;
+      color: #9fb3c9;
+      border-top: 1px solid rgba(80, 110, 140, 0.4);
+      background: #050b10;
+    }
+    a {
+      color: #7fd3ff;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    @media (max-width: 800px) {
+      header, main, footer {
+        padding-left: 6%;
+        padding-right: 6%;
+      }
+    }
+  </style>
 </head>
 <body>
-  <h1>Celula Virtual</h1>
-  <p>Probando GitHub Pages con tema Cayman.</p>
+
+<header>
+  <h1>Célula Virtual</h1>
+  <h2>Simulación biofísica de una célula mínima con depuración interactiva</h2>
+  <p>
+    Un whole-cell model diseñado desde cero para ser inspeccionable mientras corre: motor de cinética estocástica propio,
+    depurador interactivo, análisis causal retrospectivo y retroceso reproducible bit a bit. Pensado como herramienta
+    científica y de ingeniería de modelos, no solo como simulador que produce una gráfica al final.
+  </p>
+
+  <div class="hero-image">
+    <div class="hero-card">
+      <h3>Motor estocástico</h3>
+      <p>
+        Representación conceptual de una célula mínima donde cada reacción química se dispara con el algoritmo de Gillespie.
+        El foco está en la dinámica temporal exacta, no en reglas agregadas.
+      </p>
+    </div>
+    <div class="hero-card">
+      <h3>Depuración interactiva</h3>
+      <p>
+        Vista esquemática del depurador: ejecución paso a paso, breakpoints sobre especies moleculares, espacio de propensidades
+        y retroceso a estados anteriores para entender “qué consumió todo el ATP”.
+      </p>
+    </div>
+    <div class="hero-card">
+      <h3>Arquitectura modular</h3>
+      <p>
+        Diagrama de módulos: motor SSA, biología (genoma, expresión, metabolismo), carga de genomas reales, interoperabilidad SBML
+        e interfaz gráfica de escritorio.
+      </p>
+    </div>
+  </div>
+
+  <div class="badge-row">
+    <span class="badge">Whole-cell model</span>
+    <span class="badge">Gillespie exacto</span>
+    <span class="badge">Depurador interactivo</span>
+    <span class="badge">SBML interoperable</span>
+    <span class="badge">GUI PySide6</span>
+  </div>
+</header>
+
+<main>
+
+  <section>
+    <h2>Qué es Célula Virtual</h2>
+    <p class="tagline">
+      Una célula virtual vacía a la que se le puede instalar un genoma real y observar su evolución temporal completa:
+      expresión génica, regulación, metabolismo acoplado a energía y división celular, todo bajo cinética química estocástica exacta.
+    </p>
+    <p>
+      Célula Virtual es un software que representa una célula mínima simulada con el algoritmo de Gillespie. En lugar de
+      utilizar reglas ad hoc, cada reacción se modela como un proceso estocástico bien definido. El sistema acepta genomas
+      reales (FASTA + anotación) y está diseñado para escalar desde unos pocos genes hasta cientos sin cambiar código.
+    </p>
+    <p>
+      A diferencia de otros simuladores de biología de sistemas (E-Cell, VCell, whole-cell models de Karr/Covert Lab),
+      el motor de simulación se ha escrito específicamente para poder inspeccionarlo por dentro mientras corre. No es una
+      caja negra: se puede pausar, examinar el espacio de propensidades, seguir la causalidad de eventos y retroceder en
+      el tiempo de forma reproducible.
+    </p>
+  </section>
+
+  <section>
+    <h2>Funcionalidades principales</h2>
+    <div class="columns">
+      <div class="col">
+        <h3>Motor de simulación</h3>
+        <p>
+          El núcleo del sistema vive en <code>engine/</code> y está basado en el algoritmo de Gillespie (SSA) implementado
+          como iterador. Esto permite:
+        </p>
+        <ul>
+          <li>Simulación estocástica exacta de reacciones químicas.</li>
+          <li>Pausar la ejecución en cualquier punto.</li>
+          <li>Capturar snapshots del estado molecular.</li>
+        </ul>
+
+        <h3>Depurador interactivo</h3>
+        <p>
+          El módulo <code>engine/debugger.py</code> añade capacidades de depuración sobre el motor:
+        </p>
+        <ul>
+          <li>Ejecución paso a paso y breakpoints condicionales sobre el estado molecular.</li>
+          <li>Visualización en vivo del espacio de propensidades.</li>
+          <li>Análisis causal retrospectivo: responder preguntas como “¿qué consumió todo el ATP?”.</li>
+          <li>Retroceso (undo) reproducible bit a bit a estados anteriores.</li>
+        </ul>
+      </div>
+
+      <div class="col">
+        <h3>Biología de la célula</h3>
+        <p>
+          Los módulos en <code>biology/</code> implementan los procesos biológicos clave:
+        </p>
+        <ul>
+          <li>Transcripción, traducción y degradación de ARNm y proteínas.</li>
+          <li>Regulación (represión) y metabolismo acoplado a ATP.</li>
+          <li>División celular con reparto binomial de especies entre células hijas.</li>
+        </ul>
+
+        <h3>Genomas reales e interoperabilidad</h3>
+        <p>
+          La entrada de datos se gestiona en <code>data_io/</code>:
+        </p>
+        <ul>
+          <li>Carga de genomas reales vía FASTA + anotación CSV (<code>genome_loader.py</code>).</li>
+          <li>Diseño pensado para escalar de 5 a cientos de genes sin cambiar código.</li>
+          <li>Exportar e importar modelos en formato estándar SBML (<code>sbml_io.py</code>).</li>
+        </ul>
+      </div>
+
+      <div class="col">
+        <h3>Interfaz gráfica y herramientas</h3>
+        <p>
+          La interfaz gráfica de escritorio en <code>gui/</code> (PySide6, tema oscuro) expone:
+        </p>
+        <ul>
+          <li>Pestaña Genoma: carga e instalación de genomas de ejemplo.</li>
+          <li>Pestaña Ejecución: control de la simulación en tiempo real.</li>
+          <li>Pestaña Depurador: inspección detallada del motor y las propensidades.</li>
+          <li>Pestaña Forense: análisis retrospectivo de trayectorias y consumo de recursos.</li>
+        </ul>
+        <p>
+          El directorio <code>tools/</code> incluye utilidades de desarrollo, como generadores de genomas sintéticos para
+          pruebas controladas, y <code>tests/</code> contiene la suite de validación.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Instalación y uso rápido</h2>
+
+    <h3>Instalación</h3>
+    <div class="code-block">
+      git clone &lt;url-de-este-repositorio&gt;<br>
+      cd celula-virtual<br>
+      pip install -r requirements.txt
+    </div>
+    <p>
+      El proyecto requiere Python 3.10 o superior. El archivo <code>docs/requirements.txt</code> detalla qué librería
+      interviene en cada fase del proyecto (motor, biología, GUI, interoperabilidad).
+    </p>
+
+    <h3>Interfaz gráfica</h3>
+    <div class="code-block">
+      python -m gui.app
+    </div>
+    <p>
+      Desde la pestaña <strong>Genoma</strong>, se puede cargar
+      <code>examples/genomas/toy_genome.fasta</code> y su anotación, instalar el genoma en la célula virtual y pasar a
+      <strong>Ejecución</strong> para correr la simulación con visualización en tiempo real.
+    </p>
+
+    <h3>Uso desde código</h3>
+    <div class="code-block">
+      from cell import Cell<br>
+      from engine.reactions import Reaction<br><br>
+      cell = Cell(seed=1)<br>
+      cell.add_species("A", 100).add_species("B", 0)<br>
+      cell.add_reaction(Reaction("A_to_B", {"A": 1}, {"B": 1}, rate_constant=1.0))<br><br>
+      cell.run()<br>
+      print(cell.species.get_count("B"))  # 100<br><br>
+      df = cell.get_trajectory()  # pandas.DataFrame, tiempo x especie x cantidad
+    </div>
+
+    <h3>Depurador interactivo</h3>
+    <div class="code-block">
+      debugger = cell.debug(enable_snapshots=True)<br>
+      debugger.set_breakpoint("poca_A", lambda s: s["A"] &lt; 10)<br>
+      debugger.run_until_breakpoint()<br>
+      print(debugger.pending_propensities())  # qué reacciones podían haber disparado<br>
+      debugger.undo_to(5)  # retroceder al paso 5, exactamente
+    </div>
+
+    <h3>Instalar un genoma real</h3>
+    <div class="code-block">
+      from data_io.genome_loader import load_genome<br>
+      from biology.genome import GenomeModule<br>
+      from biology.translation import TranslationModule<br>
+      from biology.degradation import DegradationModule<br><br>
+      genome = load_genome("examples/genomas/toy_genome.fasta",<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;"examples/genomas/toy_genome_annotation.csv")<br>
+      cell = Cell(seed=1)<br>
+      installed = GenomeModule(genome).install(cell)<br>
+      translated = TranslationModule(installed).install(cell)<br>
+      DegradationModule(installed, translated).install(cell)  # sin esto, ARNm/proteína crecen sin límite<br><br>
+      cell.run(max_steps=500)
+    </div>
+
+    <h3>Ejecutar los tests</h3>
+    <div class="code-block">
+      pytest tests/ -v
+    </div>
+  </section>
+
+  <section>
+    <h2>Estructura del proyecto</h2>
+    <p>
+      La organización del repositorio refleja la separación entre motor de simulación, biología, entrada/salida de datos,
+      interfaz gráfica y herramientas de desarrollo:
+    </p>
+    <div class="project-structure">
+celula-virtual/
+├── engine/        # Motor de simulación (SSA, depurador, snapshots, forense, trayectorias)
+├── biology/       # Módulos biológicos (genoma, transcripción, traducción, degradación, regulación, metabolismo, replicación)
+├── data_io/       # Carga de genomas (FASTA + anotación) e interoperabilidad SBML
+├── gui/           # Interfaz gráfica de escritorio (PySide6)
+├── tools/         # Utilidades de desarrollo (generador de genomas sintéticos)
+├── tests/         # Suite de tests
+├── examples/      # Genomas de ejemplo
+├── docs/          # Whitepaper de diseño
+├── requirements.txt
+└── FILES.md       # Mapa vivo de qué archivo hace qué y su estado
+    </div>
+    <p>
+      Para saber exactamente qué hace cada archivo y en qué estado está (implementado, en progreso, pendiente), el documento
+      <code>docs/FILES.md</code> actúa como mapa vivo y se actualiza en cada cambio relevante.
+    </p>
+  </section>
+
+  <section>
+    <h2>Documentación y estado del proyecto</h2>
+
+    <h3>Documentación</h3>
+    <ul>
+      <li><strong>docs/whitepaper_celula_virtual.md</strong> — diseño completo: motivación, arquitectura, decisiones y por qué se tomaron, roadmap por fases, limitaciones conocidas.</li>
+      <li><strong>docs/FILES.md</strong> — tabla de control de archivos y su estado.</li>
+    </ul>
+
+    <h3>Estado actual</h3>
+    <p>
+      El ciclo celular central — motor SSA, depurador completo, expresión génica, regulación, metabolismo y división celular —
+      está implementado y validado con tests. La interoperabilidad SBML también está operativa.
+    </p>
+    <p>
+      La interfaz gráfica está construida y pendiente de validación funcional completa en un entorno con pantalla real
+      (ver <code>FILES.md</code>). El roadmap detallado, fase a fase, se encuentra en la sección 8 del whitepaper.
+    </p>
+
+    <h3>Limitaciones conocidas</h3>
+    <p>
+      Documentadas en detalle en la sección 12 del whitepaper. Entre las más relevantes:
+    </p>
+    <ul>
+      <li>Simulación no espacial (sin difusión ni geometría celular real).</li>
+      <li>Sin mutación del ADN: dinámica temporal, no evolución darwiniana (decisión deliberada, no limitación técnica).</li>
+      <li>Transcripción y traducción modeladas como un único paso estocástico, no como la cadena completa de unión/elongación/terminación.</li>
+      <li>La GUI no soporta simular varias células a la vez tras una división.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Licencia y contribución</h2>
+    <h3>Licencia</h3>
+    <p>
+      El proyecto está licenciado bajo <strong>GPLv3</strong>, la misma licencia que utiliza E-Cell4, lo que facilita
+      eventuales colaboraciones cruzadas y reutilización de componentes en el ecosistema de simuladores de biología de sistemas.
+    </p>
+
+    <h3>Contribuir</h3>
+    <p>
+      Célula Virtual está en desarrollo activo, todavía sin un proceso formal de contribución externa. Si quieres reportar
+      un problema, sugerir una mejora o discutir una extensión del modelo, puedes abrir un issue en el repositorio.
+    </p>
+  </section>
+
+</main>
+
+<footer>
+  <p>
+    Célula Virtual — Simulación biofísica de célula mínima con depuración interactiva.<br>
+    Diseño completo y decisiones de arquitectura: <code>docs/whitepaper_celula_virtual.md</code>.
+  </p>
+</footer>
+
 </body>
 </html>
