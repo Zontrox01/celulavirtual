@@ -22,7 +22,7 @@ Lo que lo diferencia de otros simuladores de biología de sistemas (E-Cell, VCel
 ## Instalación
 
 ```bash
-git clone <url-de-este-repositorio>
+git clone <https://github.com/Zontrox01/celulavirtual/>
 cd celula-virtual
 pip install -r requirements.txt
 ```
